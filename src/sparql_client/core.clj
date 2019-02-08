@@ -13,10 +13,13 @@
    [igraph.graph :as graph]
    [selmer.parser :as selmer]
    [vocabulary.core :as voc]
-   [iri.org.wikidata.www.entity :as wd]
+   [vocabulary.wikidata]
+   [taoensso.timbre :as log]
+   ;;[org.naturallexicon.lod.wikidata.wd :as wd]
    )
   (:gen-class))
 
+(log/set-level! :info)
 
 (defn collect-ns-meta [g next-ns]
   (let [prefix (:sh/prefix (meta next-ns))
@@ -67,7 +70,12 @@ WHERE
   (let [simplifier (fn [sparql-binding]
                      (endpoint/simplify sparql-binding (:binding-translator client)))
         ]
+    (log/info query)
     (map simplifier (endpoint/sparql-select (:endpoint-url client) query))))
+
+
+(defn ask-endpoint [client query]
+    (endpoint/sparql-ask (:endpoint-url client) query))
 
 
 
@@ -91,9 +99,38 @@ WHERE
                                    (fn[os] (set (conj os (:o b))))))
                                                 
         ]
-    (print query)
+    (log/info query)
     (reduce collect-bindings {}
             (query-endpoint client query))))
+
+(defn query-for-o [client s p]
+  (let [query  (voc/prepend-prefix-declarations
+                (selmer/render
+                 "Select ?o Where { {{subject}} {{predicate}} ?o}"
+                 {:subject (voc/qname-for s)
+                  :predicate (voc/qname-for p)
+                  }))
+        collect-bindings (fn [acc b]
+                           (conj acc (:o b)))
+                                                
+        ]
+    (log/debug query)
+    (reduce collect-bindings #{}
+            (query-endpoint client query))))
+
+(defn ask-s-p-o [client s p o]
+  (let [query (voc/prepend-prefix-declarations
+               (selmer/render
+                "ASK where { {{subject}} {{predicate}} {{object|safe}}. }"
+                {:subject (voc/qname-for s)
+                 :predicate (voc/qname-for p)
+                 :object (if (keyword? o)
+                           (voc/qname-for o)
+                           o)
+                 }))
+        ]
+    (log/debug query)
+    (ask-endpoint client query)))
 
 
 (defrecord sparql-client [endpoint-url binding-translator]
@@ -101,9 +138,14 @@ WHERE
   (normal-form [this] (throw (Exception. "NYI")))
   (subjects [this] (query-for-subjects this))
   (get-p-o [this s] (query-for-p-o this s))
+  (get-o [this s p] (query-for-o this s p))
+  (ask [this s p o] (ask-s-p-o this s p o))
+  (query [this q] (query-endpoint this q))
   
   clojure.lang.IFn
   (invoke [g s] (get-p-o g s))
+  (invoke [g s p] (get-o g s p))
+  (invoke [g s p o] (ask g s p o))
   
   )
   
@@ -116,13 +158,31 @@ WHERE
   (println "Hello, World!")
   (let [client (->sparql-client wikidata-endpoint translator)
         ]
-    #_(endpoint/sparql-select wikidata-endpoint test-query-1)
-    #_(query-endpoint client
-                    test-query-1)
-    #_(query-for-p-o client "wd:Q76")
-    #_(get-p-o client "wd:Q76")
-    #_(client "wd:Q76")
-    (client :wd:Q76)
+    ;; #_(endpoint/sparql-select wikidata-endpoint test-query-1)
+    ;; #_(query-endpoint client
+    ;;                 test-query-1)
+    ;; #_(query-for-p-o client "wd:Q76")
+    ;; #_(get-p-o client "wd:Q76")
+    ;; #_(client "wd:Q76")
+    ;; #_(client :wd:Q76)
+    ;; #_(get-o client :wd:Q76 :wdt:P166)
+    ;; #_ (client :wd:Q76 :wdt:P166)
+    ;; #_(client :wd:Q76 :wdt:P166 "\"Yowsa\"")
+    ;; #_(client :wd:Q76 :wdt:P166 :wd:Q5593890)
+    ;; #_(map (fn [q]
+    ;;        (some #(re-matches #":enForm:.*" (str %))
+    ;;              (client q :rdfs:label)))
+    ;;      (traverse client (transitive-closure :wdt:P31) [] [:wd:Q76]d))
+    (let [q (voc/prepend-prefix-declarations
+                   "Select ?label
+Where
+{
+  wd:Q76 wdt:P31* ?super.
+  ?super rdfs:label ?label.
+  Filter (Lang(?label) = \"en\")
+}")]
+      
+      (query client q))
     #_(count-subjects (->sparql-client wikidata-endpoint translator))
     ;;(keyword (:sh/prefix (meta (find-ns 'iri.com.xmlns.foaf.0.1))) "blah")
     #_(print (voc/prepend-prefix-declarations test-query-1))
