@@ -6,13 +6,15 @@ Provides a view onto an arbitrary [SPARQL endpoint](https://github.com/ont-app/s
 
 [![Clojars Project](https://img.shields.io/clojars/v/sparql-client.svg)](https://clojars.org/sparql-client)
 
+```
 (defproject ...
   :dependencies 
   [...
-   [ont/app/sparql-client "0.1.0-SNAPSHOT"]
+   [ont-app/sparql-client "0.1.0-SNAPSHOT"]
    ...
    ])
-   
+```
+
 ## Usage
 
 Require thus:
