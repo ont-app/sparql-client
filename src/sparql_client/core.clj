@@ -7,13 +7,12 @@
 
 (ns sparql-client.core
   (:require
-   [clojure.string :as s]
+   ;;[clojure.string :as s]
    [sparql-endpoint.core :as endpoint]
    [igraph.core :refer :all]
    [igraph.graph :as graph]
    [selmer.parser :as selmer]
    [vocabulary.core :as voc]
-   [vocabulary.wikidata]
    [taoensso.timbre :as log]
    ;;[org.naturallexicon.lod.wikidata.wd :as wd]
    )
@@ -21,75 +20,63 @@
 
 (log/set-level! :info)
 
-(defn collect-ns-meta [g next-ns]
-  (let [prefix (:sh/prefix (meta next-ns))
-        namespace (:sh/namespace (meta next-ns))
-        ]
-    (if (and prefix namespace)
-      (add g [[prefix :prefix-for next-ns]
-                     [next-ns :namespace namespace]])
-      g)))
-
-(def ns-graph (reduce collect-ns-meta (graph/make-graph) (all-ns)))
-
-(def wikidata-endpoint "https://query.wikidata.org/bigdata/namespace/wdq/sparql")
-
-(defn uri-translator [sparql-binding]
-  (def scsb sparql-binding)
-  (voc/keyword-for (sparql-binding "value"))
-  )
-
-(defn form-translator [sparql-binding]
-  "Returns a keyword for  `binding` as as a keyword URI for a natlex form"
-  (keyword (str (sparql-binding "xml:lang")
-                "Form:"
-                (s/replace (sparql-binding "value")
-                           " "
-                           "_"))))
-
-(def translator (assoc endpoint/default-translators
-                       :uri uri-translator
-                       :lang form-translator))
-
-(defn simplify [sparql-binding]
-  (endpoint/simplify sparql-binding translator))
-
 (def the graph/unique)
 
-(def test-query-1 "
-SELECT ?enLabel
-WHERE
-{
-  wd:Q5 rdfs:label ?enLabel; 
-  Filter (Lang(?enLabel) = \"en\")
-  }"
-  )
-
-
 (defn query-endpoint [client query]
+  "Returns [<simplified-binding> ...] for `query` posed to `client`
+Where
+<simpified-binding> := {<key> <value> ...},
+   the output of the binding translator of <client>
+<query> is a SPARQL SELECT query
+<client> is a SparqlClient
+"
   (let [simplifier (fn [sparql-binding]
-                     (endpoint/simplify sparql-binding (:binding-translator client)))
+                     (endpoint/simplify sparql-binding
+                                        (:binding-translator client)))
         ]
     (log/info query)
-    (map simplifier (endpoint/sparql-select (:endpoint-url client) query))))
+    (map simplifier
+         (endpoint/sparql-select (:query-url client) query))))
 
 
 (defn ask-endpoint [client query]
-    (endpoint/sparql-ask (:endpoint-url client) query))
-
+  "Returns boolean value of `query` posed to `client`
+Where
+<query> is a SPARQL ASK query
+<client> is a SparqlClient
+"
+    (endpoint/sparql-ask (:query-url client) query))
 
 
 (defn count-subjects [client]
+  "Returns the number of subjects at endpoint of  `client`
+Where
+<client> is a SparqlClient
+"
   (let [query "Select (Count (?s) as ?sCount) Where {?s ?p ?o}"
         ]
-    (:sCount (the (query-endpoint client query)))))
+    (:?sCount (the (query-endpoint client query)))))
 
 (defn query-for-subjects [client]
+  "Returns [<subject> ...] at endpoint of `client`
+Where
+<subject> is the uri of a subject from <client>, 
+  rendered per the binding translator of <client>
+<client> is a SparqlClient
+"
   (let [query "Select ?s Where {?s ?p ?o}"
         ]
-    (map :?s (query-endpoint client query))))
+    (map :?s
+         (query-endpoint client query))))
 
 (defn query-for-p-o [client s]
+  "Returns {<p> #{<o>...}...} for `s` at endpoint of `client`
+Where
+<p> is a predicate URI rendered per binding translator of <client>
+<o> is an object value, rendered per the binding translator of <client>
+<s> is a subject uri keyword. ~ voc/voc-re
+<client> is a SparqlClient
+"
   (let [query  (voc/prepend-prefix-declarations
                 (selmer/render
                  "Select ?p ?o Where { {{subject}} ?p ?o}"
@@ -104,6 +91,13 @@ WHERE
             (query-endpoint client query))))
 
 (defn query-for-o [client s p]
+  "Returns #{<o>...} for `s` and `p` at endpoint of `client`
+Where:
+<o> is an object rendered per binding translator of <client>
+<s> is a subject URI rendered per binding translator of <client>
+<p> is a predicate URI rendered per binding translator of <client>
+<client> is a SparqlClient
+"
   (let [query  (voc/prepend-prefix-declarations
                 (selmer/render
                  "Select ?o Where { {{subject}} {{predicate}} ?o}"
@@ -119,9 +113,14 @@ WHERE
             (query-endpoint client query))))
 
 (defn ask-s-p-o [client s p o]
+  "Returns true if `s` `p` `o` is a triple at endpoint of `client`
+Where:
+<s> <p> <o> are subject, predicate and object
+<client> is a SparqlClient
+"
   (let [query (voc/prepend-prefix-declarations
                (selmer/render
-                "ASK where { {{subject}} {{predicate}} {{object|safe}}. }"
+                "ASK where { {{subject|safe}} {{predicate|safe}} {{object|safe}}. }"
                 {:subject (voc/qname-for s)
                  :predicate (voc/qname-for p)
                  :object (if (keyword? o)
@@ -132,8 +131,15 @@ WHERE
     (log/debug query)
     (ask-endpoint client query)))
 
-
-(defrecord sparql-client [endpoint-url binding-translator]
+(defrecord 
+  ^{:doc "An IGraph compliant view on a SPARQL endpoint
+With arguments <query-url> <binding-translator>
+Where
+<query-url> is URL of a SPARQL query endpoint
+<binding-translator> := fn[<binding>] -> <simplified>
+<binding> is the value returned by a call to <query-url>
+<simplified> := {<key> <value> ...}"}
+    SparqlClient [query-url binding-translator update-url auth]
   IGraph
   (normal-form [this] (throw (Exception. "NYI")))
   (subjects [this] (query-for-subjects this))
@@ -148,46 +154,3 @@ WHERE
   (invoke [g s p o] (ask g s p o))
   
   )
-  
-    
-    
-
-(defn -main
-  "I don't do a whole lot ... yet."
-  [& args]
-  (println "Hello, World!")
-  (let [client (->sparql-client wikidata-endpoint translator)
-        ]
-    ;; #_(endpoint/sparql-select wikidata-endpoint test-query-1)
-    ;; #_(query-endpoint client
-    ;;                 test-query-1)
-    ;; #_(query-for-p-o client "wd:Q76")
-    ;; #_(get-p-o client "wd:Q76")
-    ;; #_(client "wd:Q76")
-    ;; #_(client :wd:Q76)
-    ;; #_(get-o client :wd:Q76 :wdt:P166)
-    ;; #_ (client :wd:Q76 :wdt:P166)
-    ;; #_(client :wd:Q76 :wdt:P166 "\"Yowsa\"")
-    ;; #_(client :wd:Q76 :wdt:P166 :wd:Q5593890)
-    ;; #_(map (fn [q]
-    ;;        (some #(re-matches #":enForm:.*" (str %))
-    ;;              (client q :rdfs:label)))
-    ;;      (traverse client (transitive-closure :wdt:P31) [] [:wd:Q76]d))
-    (let [q (voc/prepend-prefix-declarations
-                   "Select ?label
-Where
-{
-  wd:Q76 wdt:P31* ?super.
-  ?super rdfs:label ?label.
-  Filter (Lang(?label) = \"en\")
-}")]
-      
-      (query client q))
-    #_(count-subjects (->sparql-client wikidata-endpoint translator))
-    ;;(keyword (:sh/prefix (meta (find-ns 'iri.com.xmlns.foaf.0.1))) "blah")
-    #_(print (voc/prepend-prefix-declarations test-query-1))
-    #_(map simplify
-           (endpoint/sparql-select
-            wikidata-endpoint
-            (voc/prepend-prefix-declarations test-query-1)))))
-
