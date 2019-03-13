@@ -173,7 +173,38 @@ This returns the set of labels associated with the former president.
 
 ```
 
+We can use a traversal function as the `p` argument (see IGraph docs
+for a discussion of traversal functions) ...
+
+```
+^{:traversal-fn true
+  :wd-equivalent "wdt:P31/wdt:P279*"
+ }
+(defn isa->subClassOf* [g context acc queue]
+  "Traverses a single P31 link, then aggregates all P279 links, for every member of the queue. Returns also the context unchanged and an empty queue."
+  [context
+   (->> queue 
+        (traverse g
+                  (traverse-link :wdt:P31)
+                  (assoc context :phase :P31) ;; documentary only
+                  #{})
+                         
+        vec
+        (traverse g
+                  (transitive-closure :wdt:P279)
+                  (assoc context :phase :P279) ;; documentary only
+                  #{}))
+   []])
+
+;; Is Barry a human?...
+(client :wd:Q76 isa->subClassOf* :wd:Q5)
+->
+:wd:Q5 ;; yep
+
+```
+
 Or we can just pose a SPARQL query directly...
+
 
 ```
 (def barry-query

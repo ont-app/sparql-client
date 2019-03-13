@@ -1,5 +1,5 @@
 (defproject sparql-client "0.1.0-SNAPSHOT"
-  :description "Provides an IGraph-complient view onto an arbitrary SPARQL endpoint, informed by ont-app/vocabulary"
+  :description "Provides an IGraph-compliant view onto an arbitrary SPARQL endpoint, informed by ont-app/vocabulary"
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}

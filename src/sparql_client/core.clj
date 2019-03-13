@@ -20,7 +20,7 @@
 
 (log/set-level! :info)
 
-(def the graph/unique)
+(def the unique)
 
 (defn query-endpoint [client query]
   "Returns [<simplified-binding> ...] for `query` posed to `client`
@@ -34,7 +34,7 @@ Where
                      (endpoint/simplify sparql-binding
                                         (:binding-translator client)))
         ]
-    (log/info query)
+    (log/debug query)
     (map simplifier
          (endpoint/sparql-select (:query-url client) query))))
 
@@ -86,7 +86,7 @@ Where
                                    (fn[os] (set (conj os (:o b))))))
                                                 
         ]
-    (log/info query)
+    (log/debug query)
     (reduce collect-bindings {}
             (query-endpoint client query))))
 
@@ -150,7 +150,7 @@ Where
   
   clojure.lang.IFn
   (invoke [g s] (get-p-o g s))
-  (invoke [g s p] (get-o g s p))
-  (invoke [g s p o] (ask g s p o))
+  (invoke [g s p] (match-or-traverse g s p))
+  (invoke [g s p o] (match-or-traverse g s p o))
   
   )
