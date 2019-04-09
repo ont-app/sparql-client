@@ -4,7 +4,7 @@ Provides a view onto an arbitrary [SPARQL endpoint](https://github.com/ont-app/s
 
 ## Installation
 
-[![Clojars Project](https://img.shields.io/clojars/v/sparql-client.svg)](https://clojars.org/sparql-client)
+[![Clojars Project](https://img.shields.io/clojars/v/ont-app/sparql-client.svg)](https://clojars.org/ont-app/sparql-client)
 
 ```
 (defproject ...
