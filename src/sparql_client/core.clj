@@ -7,7 +7,7 @@
 
 (ns sparql-client.core
   (:require
-   ;;[clojure.string :as s]
+   [clojure.string :as s]
    [sparql-endpoint.core :as endpoint]
    [igraph.core :refer :all]
    [igraph.graph :as graph]
@@ -20,7 +20,147 @@
 
 (log/set-level! :info)
 
+(declare query-for-normal-form)
+(declare query-for-subjects)
+(declare query-for-p-o)
+(declare query-for-o)
+(declare ask-s-p-o)
+(declare query-endpoint)
+(declare update-endpoint)
+(declare ask-endpoint)
+(defrecord 
+  ^{:doc "An IGraph compliant view on a SPARQL endpoint
+Where
+<graph-uri> is the name of the graph (nil implies DEFAULT)
+<query-url> is URL of a SPARQL query endpoint
+<binding-translator> := fn[<binding>] -> <simplified>
+<update-url> is the URL of the update endpoint (nil implies read-only)
+<auth> is the password or other authorization token
+<binding> is the value returned by a call to <query-url>
+<simplified> is a single scalar representation of a SPARQL binding. 
+  See sparql-endpoint.core.
+"
+    }
+    SparqlClient [graph-uri query-url binding-translator update-url auth]
+  IGraph
+  (normal-form [this] (query-for-normal-form this))
+  (subjects [this] (query-for-subjects this))
+  (get-p-o [this s] (query-for-p-o this s))
+  (get-o [this s p] (query-for-o this s p))
+  (ask [this s p o] (ask-s-p-o this s p o))
+  (query [this q] (query-endpoint this q))
+
+  (add [this to-add] (add-to-graph this to-add))
+  (subtract [this to-remove] (remove-from-graph this to-remove))
+  
+  clojure.lang.IFn
+  (invoke [g] (normal-form g))
+  (invoke [g s] (get-p-o g s))
+  (invoke [g s p] (match-or-traverse g s p))
+  (invoke [g s p o] (match-or-traverse g s p o))
+  
+  )
+
 (def the unique)
+(def prefixed voc/prepend-prefix-declarations)
+
+(declare default-binding-translators)
+
+(def ask-if-graph-exists-template
+  "
+  ASK WHERE
+  {
+    Graph {{graph-qname|safe}} {}
+  }
+  ")
+
+(def create-graph-template
+  "
+  CREATE GRAPH {{graph-qname|safe}}
+  ")
+
+(defn make-graph [& {:keys
+                     [graph-uri query-url binding-translator update-url auth]}]
+  "Returns an instance of SparqlClient.
+Where
+<graph-uri> is the named graph within the SPARQL endpoint. nil implies DEFAULT
+<query-url> is the query endpoint
+<binding-translator> := {:uri <uri-fn> :lang <lang-fn> :datatype <datatype-fn>}
+  default is sparql-endpoint.core/default-translators)
+<update-url> (optional) is update endpoint (or nil if read-only)
+<auth> (optional)  is the authorization token needed to perform updates
+<uri-fn> := (fn [binding]...) -> URI representation. 
+  Default is just the URI string
+<lang-fn> := (fn [binding] ...) -> parsed language tag. 
+   Default is just the language string with no
+<datatype-fn> := (fn [binding] -> Parsed datatype
+<binding> := {:value ... 
+              :type ... 
+              &maybe 
+              :xml:lang ... 
+              :datatype ...}
+  This occurs in bindings of the form {<var> <binding>, ...} returned by a 
+  SPARQL query.
+  See also sparql-endpoint.core.
+"
+  (let [client (->SparqlClient
+                graph-uri
+                query-url
+                (or binding-translator default-binding-translators)
+                update-url
+                auth)]
+    (log/debug (:graph-uri client))
+    (if (:graph-uri client)
+      
+      (let [graph-qname (voc/qname-for (:graph-uri client))]
+        (if-not (ask-endpoint client
+                              (prefixed
+                               (selmer/render
+                                ask-if-graph-exists-template
+                                {:graph-qname graph-qname})))
+          (if (:update-url client)
+            (do 
+              (update-endpoint client
+                               (prefixed
+                                (selmer/render create-graph-template
+                                               {:graph-qname graph-qname})))
+              client)
+          ;; else there is no update-url
+            (throw (Exception. (str "Graph " graph-qname " does not exist, and there is no update URL.")))))
+        ;; else the graph exists
+        client)
+        ;;else we're using the default graph
+      client)))
+
+(defn uri-translator
+  "Returns <qualified-keyword> for `sparql-binding`
+  Where
+  <qualified-keyword> is a keyword in voc-re format
+  <sparql-binding> := {?value ...}, typically returned from a query
+  "
+  {
+   :test #(assert
+           (= (uri-translator {"value" "http://xmlns.com/foaf/0.1/homepage"})
+              :foaf:homepage))
+   }
+  [sparql-binding]
+  (voc/keyword-for (sparql-binding "value"))
+  )
+
+(defn form-translator [sparql-binding]
+  "Returns a keyword for  `binding` as a keyword URI for a natlex form"
+  (keyword (str (sparql-binding "xml:lang")
+                "Form")
+           (s/replace (sparql-binding "value")
+                      " "
+                      "_")))
+
+(def default-binding-translators
+  "Binding translators used to simplify bindings. See sparq-endpoint.core"
+  (merge endpoint/default-translators
+         {:uri uri-translator
+          :lang form-translator}))
+
 
 (defn query-endpoint [client query]
   "Returns [<simplified-binding> ...] for `query` posed to `client`
@@ -35,8 +175,10 @@ Where
                                         (:binding-translator client)))
         ]
     (log/debug query)
+    (log/debug (:query-url client))
     (map simplifier
-         (endpoint/sparql-select (:query-url client) query))))
+         (endpoint/sparql-select (:query-url client)
+                                 query))))
 
 
 (defn ask-endpoint [client query]
@@ -45,17 +187,88 @@ Where
 <query> is a SPARQL ASK query
 <client> is a SparqlClient
 "
-    (endpoint/sparql-ask (:query-url client) query))
+  (log/debug "query url:" (:query-url client))
+  (log/debug "query in ask:" query)
+  (endpoint/sparql-ask (:query-url client)
+                       query))
 
 
+(defn- query-template-map [client]
+  "Returns {<k> <v>, ...} appropriate for <client>
+Where
+<k> and <v> are selmer template parameters which may appear in some query, e.g.
+  named graph open/close clauses
+<client> is a sparql-client record
+"
+  {:graph-name-open (if-let [graph-uri (:graph-uri client)]
+                      (str "GRAPH <" (voc/iri-for graph-uri) "> {")
+                      "")
+   :graph-name-close (if-let [graph-uri (:graph-uri client)]
+                      (str "}")
+                      "")
+   })                          
+
+(def normal-form-query-template
+  "
+  Select ?s ?p ?o
+  Where
+  {
+    {{graph-name-open|safe}}
+    ?s ?p ?o
+    {{graph-name-close}}
+  }
+  ")
+
+(defn query-for-normal-form [client]
+  (letfn [(add-o [o binding]
+            (conj o (:o binding)))
+          (add-po [po binding]
+            (assoc po (:p binding)
+                   (add-o (get po (:p binding) #{})
+                          binding)))
+          (collect-binding [spo binding]
+            (assoc spo (:s binding)
+                   (add-po (get spo (:s binding) {})
+                           binding)))
+          
+          ]
+    (let [query (selmer/render normal-form-query-template
+                               (query-template-map client))
+          ]
+      (reduce collect-binding {}
+              (query-endpoint client query)))))
+    
+  
+(def count-subjects-query-template
+  "
+  Select (Count (Distinct ?s) as ?sCount) 
+  Where
+  {
+    {{graph-name-open|safe}}
+    ?s ?p ?o
+    {{graph-name-close}}
+  }
+  "
+  )
 (defn count-subjects [client]
   "Returns the number of subjects at endpoint of  `client`
 Where
 <client> is a SparqlClient
 "
-  (let [query "Select (Count (?s) as ?sCount) Where {?s ?p ?o}"
+  (let [query (selmer/render count-subjects-query-template
+                             (query-template-map client))
         ]
     (:?sCount (the (query-endpoint client query)))))
+
+(def subjects-query-template
+  "
+  Select Distinct ?s Where
+  {
+    {{graph-name-open|safe}}
+    ?s ?p ?o.
+    {{graph-name-close|safe}}
+  }
+  ")
 
 (defn query-for-subjects [client]
   "Returns [<subject> ...] at endpoint of `client`
@@ -64,10 +277,24 @@ Where
   rendered per the binding translator of <client>
 <client> is a SparqlClient
 "
-  (let [query "Select ?s Where {?s ?p ?o}"
+  (let [query (selmer/render subjects-query-template
+                             (query-template-map client))
         ]
-    (map :?s
+    (def q query)
+    (def x (query-endpoint client query))
+    (map :s
          (query-endpoint client query))))
+
+
+(def query-for-p-o-template
+  "
+  Select ?p ?o Where
+  {
+    {{graph-name-open|safe}}
+    {{subject|safe}} ?p ?o.
+    {{graph-name-close|safe}}
+  }
+  ")
 
 (defn query-for-p-o [client s]
   "Returns {<p> #{<o>...}...} for `s` at endpoint of `client`
@@ -77,10 +304,10 @@ Where
 <s> is a subject uri keyword. ~ voc/voc-re
 <client> is a SparqlClient
 "
-  (let [query  (voc/prepend-prefix-declarations
-                (selmer/render
-                 "Select ?p ?o Where { {{subject}} ?p ?o}"
-                 {:subject (voc/qname-for s)}))
+  (let [query  (prefixed
+                (selmer/render query-for-p-o-template
+                               (merge (query-template-map client)
+                                      {:subject (voc/qname-for s)})))
         collect-bindings (fn [acc b]
                            (update acc (:p b)
                                    (fn[os] (set (conj os (:o b))))))
@@ -90,6 +317,16 @@ Where
     (reduce collect-bindings {}
             (query-endpoint client query))))
 
+(def query-for-o-template
+  "
+  Select ?o Where
+  {
+    {{graph-name-open|safe}}
+    {{subject|safe}} {{predicate|safe}} ?o.
+    {{graph-name-close|safe}}
+  }
+  ")
+
 (defn query-for-o [client s p]
   "Returns #{<o>...} for `s` and `p` at endpoint of `client`
 Where:
@@ -98,12 +335,13 @@ Where:
 <p> is a predicate URI rendered per binding translator of <client>
 <client> is a SparqlClient
 "
-  (let [query  (voc/prepend-prefix-declarations
+  (let [query  (prefixed
                 (selmer/render
-                 "Select ?o Where { {{subject}} {{predicate}} ?o}"
-                 {:subject (voc/qname-for s)
-                  :predicate (voc/qname-for p)
-                  }))
+                 query-for-o-template
+                 (merge (query-template-map client)
+                        {:subject (voc/qname-for s)
+                         :predicate (voc/qname-for p)})))
+        
         collect-bindings (fn [acc b]
                            (conj acc (:o b)))
                                                 
@@ -112,45 +350,182 @@ Where:
     (reduce collect-bindings #{}
             (query-endpoint client query))))
 
+(def ask-s-p-o-template
+  "ASK where
+  {
+    {{graph-name-open|safe}}
+    {{subject|safe}} {{predicate|safe}} {{object|safe}}.
+    {{graph-name-close}}
+  }"
+  )
+
 (defn ask-s-p-o [client s p o]
   "Returns true if `s` `p` `o` is a triple at endpoint of `client`
 Where:
 <s> <p> <o> are subject, predicate and object
 <client> is a SparqlClient
 "
-  (let [query (voc/prepend-prefix-declarations
+  (let [query (prefixed
                (selmer/render
-                "ASK where { {{subject|safe}} {{predicate|safe}} {{object|safe}}. }"
-                {:subject (voc/qname-for s)
-                 :predicate (voc/qname-for p)
-                 :object (if (keyword? o)
-                           (voc/qname-for o)
-                           o)
-                 }))
+                ask-s-p-o-template
+                (merge (query-template-map client)
+                       {:subject (voc/qname-for s)
+                        :predicate (voc/qname-for p)
+                        :object (if (keyword? o)
+                                  (voc/qname-for o)
+                                  o)})))
         ]
     (log/debug query)
     (ask-endpoint client query)))
 
-(defrecord 
-  ^{:doc "An IGraph compliant view on a SPARQL endpoint
-With arguments <query-url> <binding-translator>
+(defn update-endpoint [client update]
+  (log/debug update)
+  (endpoint/sparql-update (:update-url client)
+                          (prefixed update)))
+
+(def add-update-template
+  "
+  INSERT
+  {
+    {{graph-name-open|safe}}
+    {{triples|safe}}
+    {{graph-name-close}}
+  }
+  WHERE
+  {}
+  ")
+
+
+(defn quote [s] (str "\"" s "\""))
+
+(defn as-rdf [render-literal triple]
+  "Returns a clause of rdf for `triple`, using `render-literal`
 Where
-<query-url> is URL of a SPARQL query endpoint
-<binding-translator> := fn[<binding>] -> <simplified>
-<binding> is the value returned by a call to <query-url>
-<simplified> := {<key> <value> ...}"}
-    SparqlClient [query-url binding-translator update-url auth]
-  IGraph
-  (normal-form [this] (throw (Exception. "NYI")))
-  (subjects [this] (query-for-subjects this))
-  (get-p-o [this s] (query-for-p-o this s))
-  (get-o [this s p] (query-for-o this s p))
-  (ask [this s p o] (ask-s-p-o this s p o))
-  (query [this q] (query-endpoint this q))
-  
-  clojure.lang.IFn
-  (invoke [g s] (get-p-o g s))
-  (invoke [g s p] (match-or-traverse g s p))
-  (invoke [g s p o] (match-or-traverse g s p o))
-  
-  )
+<triple> := [<s> <p> <o>]
+<render-literal> := (fn [o] ...) -> parsable rendering of <o> if <o> is 
+  not a keyword (which would be treated as a URI and we'd use voc/qname-for)
+"
+  (let [render-element #(if (keyword? %)
+                          (voc/qname-for %)
+                          (render-literal %))
+        ]
+    (str (s/join  " " (map render-element triple))
+         ".")))
+
+(defn as-query-clause [var-fn partial-triple]
+  "Returns a clause of SPARQL with variables to fill out the rest of `partial-triple`
+Where
+<partial-triple> := [<s>] or [<s> <p>]
+"
+  (case (count partial-triple)
+    1 (let [[s] partial-triple]
+        (assert (keyword? s))
+        (selmer/render "{{s-uri|safe}} {{p-var}} {{o-var}}."
+                       {:s-uri (voc/qname-for s)
+                        :p-var (var-fn "p")
+                        :o-var (var-fn "o")}))
+    
+    2 (let [[s p] partial-triple]
+        (assert (keyword? s))
+        (assert (keyword? p))
+        (selmer/render "{{s-uri|safe}} {{p-uri|safe}} {{o-var}}."
+                       {:s-uri (voc/qname-for s)
+                        :p-uri (voc/qname-for p)
+                        :o-var (var-fn "o")}))))
+
+(defn add-triples-query [client triples]
+  (selmer/render add-update-template
+                 (merge (query-template-map client)
+                        {:triples (s/join "\n"
+                                          (map (partial as-rdf quote)
+                                               triples))
+                         })))
+
+(defmethod add-to-graph [SparqlClient :vector-of-vectors]
+  [client triples]
+
+  (log/debug (prefixed
+              (add-triples-query client triples)))
+  (update-endpoint client
+                   (prefixed
+                    (add-triples-query client triples)))
+  client)
+
+(defmethod add-to-graph [SparqlClient :vector]
+  [client triple]
+  (add-to-graph client [triple]))
+
+(defmethod add-to-graph [SparqlClient :normal-form]
+  [client triples]
+  (add-to-graph client
+                (reduce-s-p-o (fn [v s p o]
+                                (conj v [s p o]))
+                              triples)))
+
+
+(def remove-update-template
+  "
+  DELETE
+  {
+    {{graph-name-open|safe}}
+    {{triples|safe}}
+    {{graph-name-close}}
+  }
+  WHERE
+  {
+    {{graph-name-open|safe}}
+    {{where-clause|safe}}
+    {{graph-name-close}}
+  }
+  ")
+
+(defn remove-triples-query [client triples]
+  (letfn [(var-fn [triple p-o]
+            ;; returns a unique var for <triple> and either 'p' or 'o'
+            (str "?_"
+                 (Math/abs (hash triple))
+                 "_"
+                 p-o))
+          (triple-clause [triple]
+            (if (= (count triple) 3)
+              (as-rdf quote triple)
+              (as-query-clause (partial var-fn triple) triple)))
+          (where-clause [triple]
+            (if (= (count triple) 3)
+              ""
+              (as-query-clause (partial var-fn triple) triple)))
+          ]
+    (selmer/render remove-update-template
+                   (merge (query-template-map client)
+                          {:triples (s/join "\n"
+                                            (map triple-clause
+                                                 triples))
+                           :where-clause (s/join "\n"
+                                                 (map where-clause
+                                                      triples))
+                                                
+                           }))))
+
+(defmethod remove-from-graph [SparqlClient :vector-of-vectors]
+  [client triples]
+
+  (update-endpoint client
+                   (prefixed
+                    (remove-triples-query client triples)))
+  client)
+
+(defmethod remove-from-graph [SparqlClient :vector]
+  [client triple]
+  (remove-from-graph client [triple]))
+
+(defmethod remove-from-graph [SparqlClient :normal-form]
+  [client triples]
+  (remove-from-graph client
+                     (reduce-s-p-o (fn [v s p o]
+                                     (conj v [s p o]))
+                                   []
+                                   (add (igraph.graph/make-graph)
+                                        triples))))
+
+
+
