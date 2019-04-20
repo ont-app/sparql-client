@@ -446,9 +446,10 @@ Where
 
   (log/debug (prefixed
               (add-triples-query client triples)))
-  (update-endpoint client
-                   (prefixed
-                    (add-triples-query client triples)))
+  (when-not (empty? triples)
+    (update-endpoint client
+                     (prefixed
+                      (add-triples-query client triples))))
   client)
 
 (defmethod add-to-graph [SparqlClient :vector]
@@ -508,10 +509,10 @@ Where
 
 (defmethod remove-from-graph [SparqlClient :vector-of-vectors]
   [client triples]
-
-  (update-endpoint client
-                   (prefixed
-                    (remove-triples-query client triples)))
+  (when-not (empty? triples)
+    (update-endpoint client
+                     (prefixed
+                      (remove-triples-query client triples))))
   client)
 
 (defmethod remove-from-graph [SparqlClient :vector]
