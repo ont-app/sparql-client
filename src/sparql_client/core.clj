@@ -1,10 +1,3 @@
-;; (ns org.naturallexicon.rdf.en.form
-;;   {:sh:prefix "enForm"
-;;    :sh:namespace "http://rdf.naturallexicon.org/en/form/"
-;;    })
-
-
-
 (ns sparql-client.core
   (:require
    [clojure.string :as s]
@@ -14,7 +7,6 @@
    [selmer.parser :as selmer]
    [vocabulary.core :as voc]
    [taoensso.timbre :as log]
-   ;;[org.naturallexicon.lod.wikidata.wd :as wd]
    )
   (:gen-class))
 
@@ -296,6 +288,17 @@ Where
   }
   ")
 
+(defn check-qname [uri-spec]
+  "Traps the keyword assertion error in voc and throws a more meaningful error about blank nodes not being supported as first-class identifiers."
+  (try
+    (voc/qname-for uri-spec)
+    (catch java.lang.AssertionError e
+      (if (= (str e)
+             "java.lang.AssertionError: Assert failed: (keyword? kw)")
+        (throw (Error. (str "The URI spec " uri-spec " is not a keyword.\nCould it be a blank node?\nIf so, blank nodes cannot be treated as first-class identifiers in SPARQL. Use a dedicated query that traverses the blank node instead.")))
+        ;; else it's some other message
+        (throw e)))))
+        
 (defn query-for-p-o [client s]
   "Returns {<p> #{<o>...}...} for `s` at endpoint of `client`
 Where
@@ -307,7 +310,7 @@ Where
   (let [query  (prefixed
                 (selmer/render query-for-p-o-template
                                (merge (query-template-map client)
-                                      {:subject (voc/qname-for s)})))
+                                      {:subject (check-qname s)})))
         collect-bindings (fn [acc b]
                            (update acc (:p b)
                                    (fn[os] (set (conj os (:o b))))))
@@ -339,8 +342,8 @@ Where:
                 (selmer/render
                  query-for-o-template
                  (merge (query-template-map client)
-                        {:subject (voc/qname-for s)
-                         :predicate (voc/qname-for p)})))
+                        {:subject (check-qname s)
+                         :predicate (check-qname p)})))
         
         collect-bindings (fn [acc b]
                            (conj acc (:o b)))
@@ -369,8 +372,8 @@ Where:
                (selmer/render
                 ask-s-p-o-template
                 (merge (query-template-map client)
-                       {:subject (voc/qname-for s)
-                        :predicate (voc/qname-for p)
+                       {:subject (check-qname s)
+                        :predicate (check-qname p)
                         :object (if (keyword? o)
                                   (voc/qname-for o)
                                   o)})))
@@ -421,7 +424,7 @@ Where
     1 (let [[s] partial-triple]
         (assert (keyword? s))
         (selmer/render "{{s-uri|safe}} {{p-var}} {{o-var}}."
-                       {:s-uri (voc/qname-for s)
+                       {:s-uri (check-qname s)
                         :p-var (var-fn "p")
                         :o-var (var-fn "o")}))
     
@@ -429,8 +432,8 @@ Where
         (assert (keyword? s))
         (assert (keyword? p))
         (selmer/render "{{s-uri|safe}} {{p-uri|safe}} {{o-var}}."
-                       {:s-uri (voc/qname-for s)
-                        :p-uri (voc/qname-for p)
+                       {:s-uri (check-qname s)
+                        :p-uri (check-qname p)
                         :o-var (var-fn "o")}))))
 
 (defn add-triples-query [client triples]

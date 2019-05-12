@@ -1,6 +1,7 @@
 (ns sparql-client.core-test
   (:require [clojure.test :refer :all]
             [clojure.string :as s]
+            [clojure.set :as set]
             [sparql-client.core :refer :all]
             [sparql-endpoint.core :as endpoint]
             [igraph.core :refer :all]
@@ -39,6 +40,11 @@ WHERE
                   #{}))
    []])
 
+(def minimal-subclass-test-membership
+  #{:wd/Q7887142 :wd/Q3778211 :wd/Q23958946 :wd/Q795052 :wd/Q2198779
+    :wd/Q4330518 :wd/Q35120 :wd/Q488383 :wd/Q830077 :wd/Q18336849
+    :wd/Q7184903 :wd/Q24229398 :wd/Q5 :wd/Q215627 :wd/Q154954})
+
 (deftest test-accessors
   (testing "Test accessor functions"
     (is (= ((:rdfs/label (client :wd/Q76)) :enForm/Barack_Obama)
@@ -51,11 +57,11 @@ WHERE
                                what-is-spanish-for-human?)))
            [{:esLabel :esForm/ser_humano}]))
     ;; testing p-traversal function...
-    (is (= (client :wd/Q76 isa->subClassOf*)
+    (is (= (set/intersection
+            (client :wd/Q76 isa->subClassOf*)
+            minimal-subclass-test-membership)
            ;; This list may change periodically in WD ...
-           #{:wd/Q7887142 :wd/Q3778211 :wd/Q23958946 :wd/Q795052 :wd/Q2198779
-             :wd/Q4330518 :wd/Q35120 :wd/Q488383 :wd/Q830077 :wd/Q18336849
-             :wd/Q7184903 :wd/Q24229398 :wd/Q5 :wd/Q215627 :wd/Q154954}))
+           minimal-subclass-test-membership))
     ;; is Barry a Human?
     (is (= (client :wd/Q76 isa->subClassOf* :wd/Q5)
            :wd/Q5))
