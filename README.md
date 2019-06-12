@@ -22,9 +22,9 @@ Require thus:
 (ns ...
   (:require 
      ...
-    [sparql-client.core :refer :all]
-    [igraph.core :refer :all]
-    [vocabulary.core :as voc]
+    [ont-app.sparql-client.core :refer :all]
+    [ont-app.igraph.core :refer :all]
+    [ont-app.vocabulary.core :as voc]
     ...
     ))
 ```
@@ -80,8 +80,8 @@ client
  :query-url
  "https://query.wikidata.org/bigdata/namespace/wdq/sparql",
  :binding-translator
- {:uri #function[sparql-client.core/uri-translator],
-  :lang #function[sparql-client.core/form-translator],
+ {:uri #function[ont-app.sparql-client.core/uri-translator],
+  :lang #function[ont-app.sparql-client.core/form-translator],
   :datatype #function[sparql-endpoint.core/parse-xsd-value]},
  :update-url nil,
  :auth nil}

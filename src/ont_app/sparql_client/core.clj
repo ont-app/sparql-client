@@ -1,11 +1,11 @@
-(ns sparql-client.core
+(ns ont-app.sparql-client.core
   (:require
    [clojure.string :as s]
-   [sparql-endpoint.core :as endpoint]
-   [igraph.core :refer :all]
-   [igraph.graph :as graph]
+   [ont-app.sparql-endpoint.core :as endpoint]
+   [ont-app.igraph.core :refer :all]
+   [ont-app.igraph.graph :as graph]
+   [ont-app.vocabulary.core :as voc]
    [selmer.parser :as selmer]
-   [vocabulary.core :as voc]
    [taoensso.timbre :as log]
    )
   (:gen-class))
@@ -528,7 +528,7 @@ Where
                      (reduce-s-p-o (fn [v s p o]
                                      (conj v [s p o]))
                                    []
-                                   (add (igraph.graph/make-graph)
+                                   (add (graph/make-graph)
                                         triples))))
 
 

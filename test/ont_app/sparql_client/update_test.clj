@@ -1,17 +1,17 @@
-(ns sparql-client.update-test
+(ns ont-app.sparql-client.update-test
   {:vann/preferredNamespacePrefix "uptest"
    :vann/preferredNamespaceUri "http://rdf.naturallexicon.org/ont-app/sparql-client/update-test#"
    }
   (:require [clojure.test :refer :all]
             [clojure.string :as s]
-            [sparql-client.core :refer :all]
-            [sparql-endpoint.core :as endpoint]
+            [ont-app.sparql-client.core :refer :all]
+            [ont-app.sparql-endpoint.core :as endpoint]
+            [ont-app.igraph.core :refer :all]
+            [ont-app.igraph.graph :as graph]
+            [ont-app.vocabulary.core :as voc]
+            [ont-app.vocabulary.wikidata]
+            [ont-app.vocabulary.linguistics]
             [taoensso.timbre :as log]
-            [igraph.core :refer :all]
-            [igraph.graph :as graph]
-            [vocabulary.core :as voc]
-            [vocabulary.wikidata]
-            [vocabulary.linguistics]
             ))
 
 (log/set-level! :info)

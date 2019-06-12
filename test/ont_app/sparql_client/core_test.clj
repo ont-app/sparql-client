@@ -1,18 +1,17 @@
-(ns sparql-client.core-test
+(ns ont-app.sparql-client.core-test
   (:require [clojure.test :refer :all]
             [clojure.string :as s]
             [clojure.set :as set]
-            [sparql-client.core :refer :all]
-            [sparql-endpoint.core :as endpoint]
-            [igraph.core :refer :all]
-            [igraph.graph :as graph]
-            [vocabulary.core :as voc]
+            [ont-app.sparql-client.core :refer :all]
+            [ont-app.sparql-endpoint.core :as endpoint]
+            [ont-app.igraph.core :refer :all]
+            [ont-app.igraph.graph :as graph]
+            [ont-app.vocabulary.core :as voc]
+            [ont-app.vocabulary.wikidata :as wikidata]
             ))
 
-(def wikidata-endpoint
-  "https://query.wikidata.org/bigdata/namespace/wdq/sparql")
 
-(def client (make-graph :query-url wikidata-endpoint)) 
+(def client (make-graph :query-url wikidata/sparql-endpoint))
 
 (def what-is-spanish-for-human? "
   SELECT ?esLabel
