@@ -38,7 +38,7 @@ Where:
    (make-test-graph (ensure-final @endpoint-ref \/)))
 
   ([endpoint]
-   (make-graph
+   (make-sparql-updater
     :graph-uri ::test-graph
     :query-url (str endpoint "query")
     :update-url (str endpoint "update"))))
@@ -68,19 +68,19 @@ SPARQL_TEST_ENDPOINT should point to a SPARQL endpoint with update privileges.
 
 (deftest test-add-subtract
   (testing "Test adding and subtracting functions"
-    (is (= (normal-form (add @client-ref [[::A ::B ::C]
+    (is (= (normal-form (add! @client-ref [[::A ::B ::C]
                                           [::A ::B ::D]]))
            {:uptest/A
             {:uptest/B
              #{:uptest/C
                :uptest/D
                }}}))
-    (is (= (normal-form (subtract @client-ref [::A ::B ::C]))
+    (is (= (normal-form (subtract! @client-ref [::A ::B ::C]))
            {:uptest/A
             {:uptest/B
              #{:uptest/D
                }}}))
-    (is (= (normal-form (subtract @client-ref [::A ::B]))
+    (is (= (normal-form (subtract! @client-ref [::A ::B]))
            {}))
     ))
 

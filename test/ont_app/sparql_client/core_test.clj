@@ -11,7 +11,7 @@
             ))
 
 
-(def client (make-graph :query-url wikidata/sparql-endpoint))
+(def client (make-sparql-reader :query-url wikidata/sparql-endpoint))
 
 (def what-is-spanish-for-human? "
   SELECT ?esLabel
@@ -40,9 +40,10 @@ WHERE
    []])
 
 (def minimal-subclass-test-membership
-  #{:wd/Q7887142 :wd/Q3778211 :wd/Q23958946 :wd/Q795052 :wd/Q2198779
-    :wd/Q4330518 :wd/Q35120 :wd/Q488383 :wd/Q830077 :wd/Q18336849
-    :wd/Q7184903 :wd/Q24229398 :wd/Q5 :wd/Q215627 :wd/Q154954})
+  #{:wd/Q488383 :wd/Q24229398 :wd/Q5 :wd/Q215627 :wd/Q795052
+    :wd/Q3778211 :wd/Q154954 :wd/Q830077 :wd/Q35120 :wd/Q23958946
+    :wd/Q18336849}) ;; subject to change depending on WD.
+
 
 (deftest test-accessors
   (testing "Test accessor functions"
