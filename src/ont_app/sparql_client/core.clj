@@ -182,7 +182,7 @@ Where
   SPARQL query.
   See also sparql-endpoint.core.
 "
-  (let [client (->SparqlReader
+  (let [client (->SparqlUpdater
                 graph-uri
                 query-url
                 (or binding-translator
@@ -579,10 +579,13 @@ Where
 
 (defmethod add-to-graph [SparqlUpdater :normal-form]
   [client triples]
-  (add-to-graph client
-                (reduce-spo (fn [v s p o]
-                              (conj v [s p o]))
-                            triples)))
+  (add-to-graph
+   client
+   (reduce-spo (fn [v s p o]
+                 (conj v [s p o]))
+               []
+               ;; use igraph.graph as an adapter
+               (ont-app.igraph.graph/make-graph :contents triples))))
 
 
 (def remove-update-template
@@ -637,6 +640,10 @@ Where
   client)
 
 (defmethod remove-from-graph [SparqlUpdater :vector]
+  [client triple]
+  (remove-from-graph client [triple]))
+
+(defmethod remove-from-graph [SparqlUpdater :underspecified-triple]
   [client triple]
   (remove-from-graph client [triple]))
 

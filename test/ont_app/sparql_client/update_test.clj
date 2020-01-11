@@ -8,16 +8,21 @@
             [ont-app.sparql-endpoint.core :as endpoint]
             [ont-app.igraph.core :refer :all]
             [ont-app.igraph.graph :as graph]
+            [ont-app.igraph.core-test :as igraph-test]
             [ont-app.vocabulary.core :as voc]
             [ont-app.vocabulary.wikidata]
             [ont-app.vocabulary.linguistics]
             [taoensso.timbre :as log]
             ))
 
-(log/set-level! :info)
+(log/set-level! :info) ;;:debug) ;; :info)
 
-(def client-ref (atom nil))
+
+(def clients-ref (atom (graph/make-graph)))
+;; holds all clients used in testing [endpoint uri client]*
+
 (def endpoint-ref (atom (System/getenv "SPARQL_TEST_ENDPOINT")))
+;; eg: "http://localhost:3030/ont-app/"
 
 (defn ensure-final 
   "returns `s`, possibly appending `c` 
@@ -33,55 +38,98 @@ Where:
     s
     (str s c)))
 
+
 (defn make-test-graph
   ([]
-   (make-test-graph (ensure-final @endpoint-ref \/)))
+   (when (not @endpoint-ref)
+     (log/warn "No SPARQL_TEST_ENDPOINT variable defined"))
+   (make-test-graph (ensure-final @endpoint-ref \/)
+                    ::test-graph))
+  ([uri]
+   (make-test-graph (ensure-final @endpoint-ref \/)
+                    uri))
+  ([endpoint uri]
+   (swap! clients-ref add
+          [endpoint
+            uri
+            (make-sparql-updater
+             :graph-uri uri
+             :query-url (str endpoint "query")
+             :update-url (str endpoint "update"))])
+   (the (@clients-ref endpoint uri))))
 
+
+(defn drop-all
+  ([] (drop-all (ensure-final @endpoint-ref \/)))
+  ([endpoint] (update-endpoint
+               (or (the (@clients-ref endpoint)
+                        first)
+                   (make-test-graph endpoint ::dummy))
+               "DROP ALL")))
+
+(defn drop-client
+  ([]
+   (drop-client (ensure-final @endpoint-ref \/)
+                ::test-graph))
   ([endpoint]
-   (make-sparql-updater
-    :graph-uri ::test-graph
-    :query-url (str endpoint "query")
-    :update-url (str endpoint "update"))))
+   (drop-client endpoint
+               ::test-graph))
+  ([endpoint uri]
+   (when-let [g (the (@clients-ref endpoint uri))]
+    (update-endpoint
+     g
+     (prefixed (str "DROP GRAPH " (voc/qname-for uri))))
+    (swap! clients-ref subtract [endpoint uri]))))
 
-
-
-(defn client-fixture [test-fn]
-  "Side-effect: runs `test-fn` in the context of a test graph named ::test-graph at a SPARQL endpoint typically specified by the env SPARQL_TEST_ENDPOINT.
-Side-effect: drops ::test-graph
-Where
-<test-fn> is a deftest.
-SPARQL_TEST_ENDPOINT should point to a SPARQL endpoint with update privileges.
-"
-  (if-let [endpoint @endpoint-ref]
-    (do
-      (reset! client-ref (make-test-graph)) 
-      (test-fn)
-      (update-endpoint
-       @client-ref
-       (prefixed (str "DROP GRAPH " (voc/qname-for ::test-graph))))
-      (reset! client-ref nil)
-      )
-    ;; else no env var set...
-    (log/warn "No SPARQL_TEST_ENDPOINT variable defined")))
-
-(use-fixtures :once client-fixture)
+(defn reset-client
+  ([]
+   (reset-client @endpoint-ref ::test-graph))
+  ([endpoint]
+   (reset-client endpoint ::test-graph))
+  ([endpoint uri]
+   (drop-client endpoint uri)
+   (make-test-graph endpoint uri)))
+  
 
 (deftest test-add-subtract
   (testing "Test adding and subtracting functions"
-    (is (= (normal-form (add! @client-ref [[::A ::B ::C]
-                                          [::A ::B ::D]]))
-           {:uptest/A
-            {:uptest/B
-             #{:uptest/C
-               :uptest/D
-               }}}))
-    (is (= (normal-form (subtract! @client-ref [::A ::B ::C]))
-           {:uptest/A
-            {:uptest/B
-             #{:uptest/D
-               }}}))
-    (is (= (normal-form (subtract! @client-ref [::A ::B]))
-           {}))
-    ))
+    (if @endpoint-ref
+      (let [g (reset-client)]
+        (is (= (normal-form (add! g  [[::A ::B ::C]
+                                      [::A ::B ::D]]))
+               {:uptest/A
+                {:uptest/B
+                 #{:uptest/C
+                   :uptest/D
+                   }}}))
+        (is (= (normal-form (subtract! g [::A ::B ::C]))
+               {:uptest/A
+                {:uptest/B
+                 #{:uptest/D
+                   }}}))
+        (is (= (normal-form (subtract! g [::A ::B]))
+               {})))
+      ;; else
+      (log/warn "No SPARQL_TEST_ENDPOINT env variable defined"))))
 
+(deftest test-readme
+  (testing "igraph readme stuff"
+    (if @endpoint-ref
+      (let []
+        (reset! igraph-test/eg (reset-client @endpoint-ref ::igraph-test/graph_eg))
+        (reset! igraph-test/eg-with-types (reset-client @endpoint-ref ::igraph-test/graph_eg-with-types))
+        
+        (add! @igraph-test/eg igraph-test/eg-data)
+        (add! @igraph-test/eg-with-types
+              (normal-form
+               (union (graph/make-graph
+                       :contents igraph-test/eg-data)
+                      (graph/make-graph
+                       :contents igraph-test/types-data))))
+        (igraph-test/readme))
+      ;; else
+      (log/warn "No SPARQL_TEST_ENDPOINT env variable defined"))))
+
+
+    
 
