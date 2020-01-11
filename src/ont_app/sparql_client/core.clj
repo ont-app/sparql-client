@@ -649,12 +649,4 @@ Where
                                    (add (graph/make-graph)
                                         triples))))
 
-(defn write-graph [g output-path]
-  "Side-effect: writes the contents of <g> in normal form to <output-path>
-Where
-<g> implements IGraph
-<output-path> is a file.
-"
-  (with-open [outstream (io/writer output-path)]
-    (.write outstream (str (normal-form g)))))
 
