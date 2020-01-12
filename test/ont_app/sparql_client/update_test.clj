@@ -116,8 +116,12 @@ Where:
   (testing "igraph readme stuff"
     (if @endpoint-ref
       (let []
-        (reset! igraph-test/eg (reset-client @endpoint-ref ::igraph-test/graph_eg))
-        (reset! igraph-test/eg-with-types (reset-client @endpoint-ref ::igraph-test/graph_eg-with-types))
+        (reset! igraph-test/eg
+                (reset-client @endpoint-ref ::igraph-test/graph_eg))
+        (reset! igraph-test/eg-with-types
+                (reset-client @endpoint-ref ::igraph-test/graph_eg-with-types))
+        (reset! igraph-test/mutable-eg
+                (reset-client @endpoint-ref ::igraph-test/mutable-eg))
         
         (add! @igraph-test/eg igraph-test/eg-data)
         (add! @igraph-test/eg-with-types
@@ -126,7 +130,11 @@ Where:
                        :contents igraph-test/eg-data)
                       (graph/make-graph
                        :contents igraph-test/types-data))))
-        (igraph-test/readme))
+        (igraph-test/readme)
+        
+        (add! @igraph-test/mutable-eg igraph-test/eg-data)
+        (igraph-test/readme-mutable)
+        )
       ;; else
       (log/warn "No SPARQL_TEST_ENDPOINT env variable defined"))))
 
