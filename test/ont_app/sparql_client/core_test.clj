@@ -2,6 +2,7 @@
   (:require [clojure.test :refer :all]
             [clojure.string :as s]
             [clojure.set :as set]
+            [ont-app.graph-log.core :as glog]
             [ont-app.sparql-client.core :refer :all]
             [ont-app.sparql-endpoint.core :as endpoint]
             [ont-app.igraph.core :refer :all]
@@ -10,6 +11,7 @@
             [ont-app.vocabulary.wikidata :as wikidata]
             ))
 
+(glog/log-reset!)
 
 (def client (make-sparql-reader :query-url wikidata/sparql-endpoint))
 
@@ -68,7 +70,7 @@ SELECT ?label
 WHERE
 {
   wd:Q76 rdfs:label ?label; 
-  Filter (Lang(?label) = "en")
+  Filter (Lang(?label) = \"en\")
   }"))
 
     ))

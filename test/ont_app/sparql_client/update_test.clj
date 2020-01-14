@@ -8,7 +8,7 @@
             ;; 3rd party
             [taoensso.timbre :as timbre]
             ;; ont-app
-            [ont-app.graph-log :as glog]
+            [ont-app.graph-log.core :as glog]
             [ont-app.sparql-client.core :refer :all]
             [ont-app.sparql-endpoint.core :as endpoint]
             [ont-app.igraph.core :refer :all]
@@ -20,7 +20,7 @@
             ))
 
 (timbre/set-level! :info) ;;:debug) ;; :info)
-(glog/reset-log!)
+(glog/log-reset!)
 
 (def clients-ref (atom (graph/make-graph)))
 ;; holds all clients used in testing [endpoint uri client]*
@@ -45,11 +45,11 @@ Where:
 
 (defn make-test-graph
   ([]
-   (when (not @endpoint-ref)
-     (glog/warn! ::no-endpoint
-                 :glog/message "No SPARQL_TEST_ENDPOINT variable defined"))
-   (make-test-graph (ensure-final @endpoint-ref \/)
-                    ::test-graph))
+   (if (not @endpoint-ref)
+     (glog/fatal! ::no-endpoint
+                 :glog/message "No SPARQL_TEST_ENDPOINT variable defined")
+     (make-test-graph (ensure-final @endpoint-ref \/)
+                      ::test-graph)))
   ([uri]
    (make-test-graph (ensure-final @endpoint-ref \/)
                     uri))
