@@ -117,7 +117,8 @@ client
  :binding-translator
  {:uri #function[ont-app.sparql-client.core/uri-translator],
   :lang #function[ont-app.sparql-client.core/form-translator],
-  :datatype #function[sparql-endpoint.core/parse-xsd-value]},
+  :datatype #function[ont-app.sparql-endpoint.core/parse-xsd-value],
+  :bnode #function[clojure.core/partial/fn--5826]},
  :auth nil}
 ```
 
@@ -163,9 +164,7 @@ Let's say we're just interested in the labels...
 This returns the set of labels associated with the former president.
 
 ```
-> (def barry-labels (client :wd/Q76 :rdfs/label))
-barry-labels
->
+> (def barry-labels (client :wd/Q76 :rdfs/label)]
 > ;; English...
 > (filter (comp #(re-find #"^enForm" (namespace %))) barry-labels)
 (:enForm/Barack_Obama)
@@ -286,16 +285,25 @@ Given the above, we can query the client thus:
 <a name="h2-sparql-updater"></a>
 ## sparql-updater
 
-In order to update a client, when making the grpah you must specify an :update-url parameter to an endpoint with a functioning update endpoint. There is an :auth parameter for handling passwords, but that is not yet implemented.
+SPARQL endpoints are mutable databases, and so update operations are
+destructive.
+
+When you have access to a SPARQL update endpoint, we use
+`make-sparql-updater`:
 
 ```
-(def g (make-graph
+(def g (make-sparql-updater
         :graph-uri ::test-graph
         :query-url "localhost:3030/my_dataset/query"
         :update-url "localhost:3030/my_dataset/update"))
 
 ```
-We add/subtract in the usual way:
+
+This has the same parameters as `make-sparql-reader`, plus an
+`:update-url` parameter.
+
+This implements the [IGraphMutable](https://github.com/ont-app/igraph/tree/develop#IGraphMutable) protocol, with methods `add!` and `subtract!`:
+
 ```
 (ns example-ns
   {
@@ -305,19 +313,20 @@ We add/subtract in the usual way:
   (require ....)
 )
 
-(def g (make-graph...))
+(def g (make-sparql-updater ...))
 
-(normal-form (add g [[::A ::B ::C]]...))
+(normal-form (add! g [[::A ::B ::C]]...))
 ;; ->
 {:eg/A {:eg/B #{:eg/C}}}
 
-(normal-form (subtract g [[::A]]...))
+(normal-form (subtract! g [[::A]]...))
 ;;->
 {}
 
 ```
 
-Ordinary SPARQL updateS can also be posed:
+
+Ordinary SPARQL updates can also be posed:
 
 ```
 (update-endoint g "DROP ALL") # careful now!
@@ -329,17 +338,11 @@ Ordinary SPARQL updateS can also be posed:
 {}
 ```
 
-<a name="h3-mutability"></a>
-### Mutability
-SPARQL endpoints are mutable databases, and so update operations are
-destructive for this implementation of IGraph.
-
 <a name="h2-future-work"></a>
 ## Future work
 
 * Authorization tokens still need to be implemented.
 * Literal object types are not infered and encoded with ^^xsd:* datatypes.
-
 
 ## License
 

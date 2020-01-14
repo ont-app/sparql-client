@@ -44,6 +44,16 @@ WHERE
 
 (deftest test-accessors
   (testing "Test accessor functions"
+    (is (= (:query-url client)
+           "https://query.wikidata.org/bigdata/namespace/wdq/sparql"))
+    (is (= (filter (comp #(re-find #"^enForm" (namespace %)))
+                   (client :wd/Q76 :rdfs/label))
+           '(:enForm/Barack_Obama)))
+    (is (= (filter (comp #(re-find #"^zhForm" (namespace %)))
+                   (client :wd/Q76 :rdfs/label))
+           '(:zhForm/巴拉克·奧巴馬)))
+    (is (= (client :wd/Q76 instance-of :wd/Q5)
+           :wd/Q5))
     (is (= ((:rdfs/label (client :wd/Q76)) :enForm/Barack_Obama)
            :enForm/Barack_Obama))
     (is (= ((client :wd/Q76 :rdfs/label) :enForm/Barack_Obama)
@@ -72,5 +82,8 @@ WHERE
   wd:Q76 rdfs:label ?label; 
   Filter (Lang(?label) = \"en\")
   }"))
+    (is (= (query client (prefixed barry-query))
+           '({:label :enForm/Barack_Obama})))
 
     ))
+
