@@ -1,7 +1,15 @@
 # sparql-client
 
-Provides a view onto an arbitrary [SPARQL endpoint](https://github.com/ont-app/sparql-endpoint) using the [ont-app/IGraph](https://github.com/ont-app/igraph) protocol, and incoporating the [ont-app/vocabulary](https://github.com/ont-app/vocabulary) facility.
+Provides a view onto an arbitrary [SPARQL
+endpoint](https://github.com/ont-app/sparql-endpoint) using the
+[ont-app/IGraph](https://github.com/ont-app/igraph) protocol, and
+incoporating the
+[ont-app/vocabulary](https://github.com/ont-app/vocabulary) facility.
 
+This revolves around two defrecords: `sparql-reader` for read-only
+access to a public server, and `sparql-updater` for updating a mutable graph.
+
+<a name="h2-installation"></a>
 ## Installation
 
 [![Clojars Project](https://img.shields.io/clojars/v/ont-app/sparql-client.svg)](https://clojars.org/ont-app/sparql-client)
@@ -15,6 +23,7 @@ Provides a view onto an arbitrary [SPARQL endpoint](https://github.com/ont-app/s
    ])
 ```
 
+<a name="h2-usage"></a>
 ## Usage
 
 Require thus:
@@ -29,49 +38,75 @@ Require thus:
     ))
 ```
 
-Then create the client thus:
+Then create sparql-reader thus:
+
 ```
-(make-graph 
-  :graph-uri <graph name> (optional)
+(make-sparql-reader
+  :graph-uri <graph name> (optional, defaulting to DEFAULT)
   :query-url <query endpoint> 
-  :update-url <update endpoint> (optional if read-only)
   :binding-translator <binding translator> (optional)
-  :authentication <authentication> (as required by <update endpoint>)
+  :authentication <authentication> (as required by the endpoint)
   )
 
 ```
 
+Such graphs will give you to view the contents of a read-only SPARQL
+endpoint using the `IGraph` protocol to access members of the graph.
+
+Then create sparql-updater thus:
+
+```
+(make-sparql-updater
+  :graph-uri <graph name> (optional, defaulting to DEFAULT)
+  :query-url <query endpoint> 
+  :update-url <update endpoint> 
+  :binding-translator <binding translator> (optional)
+  :authentication <authentication> (as required by the endpoint)
+  )
+```
+
 Where:
-* `graph name` is a keyword representing the URI of the appropriate named graph.
-  if unspecified, the DEFAULT graph will be assumed.
-* `query-endpoint` is a string indicating the URL of a SPARQL query endpoint
-* `binding-translator` is a function that takes the bindings returned in the standard SPARQL query response format, and returns a simplified key/value map.
-* `update-endpoint` is a string indicating the URL of a SPARQL update query endpoint (or `nil`)
-* `authentication` is a password (or `nil`)
+- `graph name` is a keyword representing the URI of the appropriate
+  named graph.  if unspecified, the DEFAULT graph will be assumed.
+- `query-endpoint` is a string indicating the URL of a SPARQL query
+  endpoint
+- `binding-translator` is a function that takes the bindings returned
+  in the standard SPARQL query response format, and returns a
+  simplified key/value map.
+- `update-endpoint` is a string indicating the URL of a SPARQL update
+  query endpoint (sparql-updater only)
+- `authentication` is a password (as needed; defaults to  `nil`)
 
-This will produce a record that implements [ont-app/IGraph](https://github.com/ont-app/igraph). At present only the read-only accessor facilities are supported.
+Each of these will produce a record that implements
+[ont-app/IGraph](https://github.com/ont-app/igraph).
 
-Keywords in any namespaces with the appropriate [Linked Open Data](https://en.wikipedia.org/wiki/Linked_data) (LOD) constructs described in [ont-app/vocabulary](https://github.com/ont-app/vocabulary) will be interpreted as [URI](https://en.wikipedia.org/wiki/Uniform_Resource_Identifier)s.
+Keywords in any namespaces with the appropriate [Linked Open
+Data](https://en.wikipedia.org/wiki/Linked_data) (LOD) constructs
+described in
+[ont-app/vocabulary](https://github.com/ont-app/vocabulary) will be
+interpreted as
+[URI](https://en.wikipedia.org/wiki/Uniform_Resource_Identifier)s.
 
 
-## Examples
-    
+<a name="h2-member-access"></a>
+## member access (both reader and updater)
 
-Let's say we want to reference subjects in [Wikidata](https://www.wikidata.org/wiki/Wikidata:Main_Page). We can define the query endpoint...
+Let's say we want to reference subjects in
+[Wikidata](https://www.wikidata.org/wiki/Wikidata:Main_Page). We can
+define the query endpoint...
 
 ```
 (def wikidata-endpoint
   "https://query.wikidata.org/bigdata/namespace/wdq/sparql")
 ```
 
-
 We can define a read-only SPARQL client to that endpoint...
 
 ```
-(def client (make-graph :query-url wikidata-endpoint)) 
+(def client (make-sparql-reader :query-url wikidata-endpoint)) 
 ```
 
-This will produce an instance of a SparqlClient
+This will produce an instance of a SparqlReader
 
 ```
 client
@@ -83,7 +118,6 @@ client
  {:uri #function[ont-app.sparql-client.core/uri-translator],
   :lang #function[ont-app.sparql-client.core/form-translator],
   :datatype #function[sparql-endpoint.core/parse-xsd-value]},
- :update-url nil,
  :auth nil}
 ```
 
@@ -129,48 +163,33 @@ Let's say we're just interested in the labels...
 This returns the set of labels associated with the former president.
 
 ```
-(def barry-labels (client :wd/Q76 :rdfs/label)
-
-;; English...
-(filter (comp #(re-find #"^enForm" %) name) barry-labels)
-;; ->
+> (def barry-labels (client :wd/Q76 :rdfs/label))
+barry-labels
+>
+> ;; English...
+> (filter (comp #(re-find #"^enForm" (namespace %))) barry-labels)
 (:enForm/Barack_Obama)
-
-;; Chinese ...
-(filter (comp #(re-find #"^zhForm" %) name) barry-labels)
-;; ->
+>
+> ;; Chinese ...
+> (filter (comp #(re-find #"^zhForm" (namespace %))) barry-labels)
 (:zhForm/巴拉克·奧巴馬)
-
+>
 ```
 
 We can use a traversal function as the `p` argument (see IGraph docs
 for a discussion of traversal functions) ...
 
 ```
-^{:traversal-fn true
-  :wd-equivalent "wdt:P31/wdt:P279*"
- }
-(defn isa->subClassOf* [g context acc queue]
-  "Traverses a single P31 link, then aggregates all P279 links, for every member of the queue. Returns also the context unchanged and an empty queue."
-  [context
-   (->> queue 
-        (traverse g
-                  (traverse-link :wdt/P31)
-                  #{})
-                         
-        (traverse g
-                  (transitive-closure :wdt/P279)
-                  #{}))
-   []])
-
-;; Is Barry a human?...
-(client :wd/Q76 isa->subClassOf* :wd/Q5)
-->
+> (def instance-of (t-comp [:wdt/P31 (transitive-closure :wdt/P279)]))
+instance-of
+> ;; Is Barry a human?...
+> (client :wd/Q76 instance-of :wd/Q5)
 :wd/Q5 ;; yep
-
+>
 ```
-### Querying
 
+<a name="h3-querying"></a>
+### Querying
 
 The native query format is of course SPARQL:
 
@@ -185,7 +204,8 @@ WHERE
   }")
 ```
 
-#### The `prefixed` function
+<a name="h4-the-prefixed-function"></a>
+#### The `prefixed` function, and namespace metadata
 
 If there are proper ont-app/vocabulary namespace declarations, we can
 automatically assign prefixes to a query using the `prefixed`
@@ -206,8 +226,7 @@ WHERE
 This works because metadata has been assigned to the metadata of namespaces associated with `wd` and `rdfs` ...
 
 ```
-(voc/ns-to-prefix) ;; Searches ns metadata for prefix declarations
-;; ->
+> (voc/prefix-to-ns)
 {
  ...
  "wd" #namespace[org.naturallexicon.lod.wikidata.wd],
@@ -215,16 +234,13 @@ This works because metadata has been assigned to the metadata of namespaces asso
  "rdfs" #namespace[org.naturallexicon.lod.rdf-schema],
  ...
 }
-
-(meta (find-ns 'org.naturallexicon.lod.wikidata.wd))
-;; -> 
+> (meta (find-ns 'org.naturallexicon.lod.wikidata.wd))
 {:dc/title "Wikibase/EntityData",
  :foaf/homepage "https://www.mediawiki.org/wiki/Wikibase/EntityData",
  :vann/preferredNamespaceUri "http://www.wikidata.org/entity/",
  :vann/preferredNamespacePrefix "wd"}
- 
-(meta (find-ns 'org.naturallexicon.lod.rdf-schema))
-;; ->
+> 
+> (meta (find-ns 'org.naturallexicon.lod.rdf-schema))
 {:dc/title "The RDF Schema vocabulary (RDFS)",
  :vann/preferredNamespaceUri "http://www.w3.org/2000/01/rdf-schema#",
  :vann/preferredNamespacePrefix "rdfs",
@@ -234,13 +250,15 @@ This works because metadata has been assigned to the metadata of namespaces asso
  [["http://www.w3.org/2000/01/rdf-schema#"
    :dcat/mediaType
    "text/turtle"]]}
- 
+> 
 ```
+
 The only annotations required to resolve prefixes appropriately are
 the `:vann/preferredNamespaceUri` and `:vann/preferredNamespacePrefix`
 annotations. See ont-app/vocabulary for more details about annotating
 namespaces.
 
+<a name="h4-binding-translation"></a>
 #### Binding translation
 
 By default, bindings in the result set are simplified as follows:
@@ -265,7 +283,8 @@ Given the above, we can query the client thus:
 
 ```
 
-## Updating
+<a name="h2-sparql-updater"></a>
+## sparql-updater
 
 In order to update a client, when making the grpah you must specify an :update-url parameter to an endpoint with a functioning update endpoint. There is an :auth parameter for handling passwords, but that is not yet implemented.
 
@@ -310,18 +329,17 @@ Ordinary SPARQL updateS can also be posed:
 {}
 ```
 
-
+<a name="h3-mutability"></a>
 ### Mutability
 SPARQL endpoints are mutable databases, and so update operations are
 destructive for this implementation of IGraph.
 
-### Future work
+<a name="h2-future-work"></a>
+## Future work
 
-* Add/subtract should accommodate triple specifications with any odd number of members. At present each triple must have only 3 members.
 * Authorization tokens still need to be implemented.
 * Literal object types are not infered and encoded with ^^xsd:* datatypes.
-* There may yet be a reasonably performant way to deal with the
-  (im)mutability issue.
+
 
 ## License
 

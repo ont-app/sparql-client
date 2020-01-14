@@ -1,9 +1,14 @@
 (ns ont-app.sparql-client.update-test
   {:vann/preferredNamespacePrefix "uptest"
-   :vann/preferredNamespaceUri "http://rdf.naturallexicon.org/ont-app/sparql-client/update-test#"
+   :vann/preferredNamespaceUri
+   "http://rdf.naturallexicon.org/ont-app/sparql-client/update-test#"
    }
   (:require [clojure.test :refer :all]
             [clojure.string :as s]
+            ;; 3rd party
+            [taoensso.timbre :as timbre]
+            ;; ont-app
+            [ont-app.graph-log :as glog]
             [ont-app.sparql-client.core :refer :all]
             [ont-app.sparql-endpoint.core :as endpoint]
             [ont-app.igraph.core :refer :all]
@@ -12,11 +17,10 @@
             [ont-app.vocabulary.core :as voc]
             [ont-app.vocabulary.wikidata]
             [ont-app.vocabulary.linguistics]
-            [taoensso.timbre :as log]
             ))
 
-(log/set-level! :info) ;;:debug) ;; :info)
-
+(timbre/set-level! :info) ;;:debug) ;; :info)
+(glog/reset-log!)
 
 (def clients-ref (atom (graph/make-graph)))
 ;; holds all clients used in testing [endpoint uri client]*
@@ -42,7 +46,8 @@ Where:
 (defn make-test-graph
   ([]
    (when (not @endpoint-ref)
-     (log/warn "No SPARQL_TEST_ENDPOINT variable defined"))
+     (glog/warn! ::no-endpoint
+                 :glog/message "No SPARQL_TEST_ENDPOINT variable defined"))
    (make-test-graph (ensure-final @endpoint-ref \/)
                     ::test-graph))
   ([uri]
@@ -110,7 +115,9 @@ Where:
         (is (= (normal-form (subtract! g [::A ::B]))
                {})))
       ;; else
-      (log/warn "No SPARQL_TEST_ENDPOINT env variable defined"))))
+      (glog/warn! ::no-endpoint
+                  :glog/message
+                  "No SPARQL_TEST_ENDPOINT env variable defined"))))
 
 (deftest test-readme
   (testing "igraph readme stuff"
@@ -136,7 +143,9 @@ Where:
         (igraph-test/readme-mutable)
         )
       ;; else
-      (log/warn "No SPARQL_TEST_ENDPOINT env variable defined"))))
+      (glog/warn! ::no-endpoint
+                  :glog/message
+                  "No SPARQL_TEST_ENDPOINT env variable defined"))))
 
 
     

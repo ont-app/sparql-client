@@ -13,6 +13,7 @@
 
 (def client (make-sparql-reader :query-url wikidata/sparql-endpoint))
 
+
 (def what-is-spanish-for-human? "
   SELECT ?esLabel
 WHERE
@@ -22,22 +23,16 @@ WHERE
   }"
   )
 
+(def barry-query
+    "
+SELECT ?label
+WHERE
+{
+  wd:Q76 rdfs:label ?label; 
+  Filter (Lang(?label) = \"en\")
+  }")
 
-^{:wd-equivalent "wdt:P31/wdt:P279*"}
-(defn isa->subClassOf* [g context acc queue]
-  [context
-   (->> queue 
-        (traverse g
-                  (traverse-link :wdt/P31)
-                  (assoc context :phase :P31)
-                  #{})
-                         
-        vec
-        (traverse g
-                  (transitive-closure :wdt/P279)
-                  (assoc context :phase :P279)
-                  #{}))
-   []])
+(def instance-of (t-comp [:wdt/P31 (transitive-closure :wdt/P279)]))
 
 (def minimal-subclass-test-membership
   #{:wd/Q488383 :wd/Q24229398 :wd/Q5 :wd/Q215627 :wd/Q795052
@@ -58,11 +53,22 @@ WHERE
            [{:esLabel :esForm/ser_humano}]))
     ;; testing p-traversal function...
     (is (= (set/intersection
-            (client :wd/Q76 isa->subClassOf*)
+            (client :wd/Q76 instance-of)
             minimal-subclass-test-membership)
            ;; This list may change periodically in WD ...
            minimal-subclass-test-membership))
     ;; is Barry a Human?
-    (is (= (client :wd/Q76 isa->subClassOf* :wd/Q5)
+    (is (= (client :wd/Q76 instance-of :wd/Q5)
            :wd/Q5))
+    (is (= (prefixed barry-query)
+           "PREFIX wd: <http://www.wikidata.org/entity/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?label
+WHERE
+{
+  wd:Q76 rdfs:label ?label; 
+  Filter (Lang(?label) = "en")
+  }"))
+
     ))

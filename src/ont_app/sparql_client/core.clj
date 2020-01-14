@@ -1,12 +1,17 @@
 (ns ont-app.sparql-client.core
+  {:vann/preferredNamespacePrefix "sparql-client"
+   :vann/preferredNamespaceUri
+   "http://rdf.naturallexicon.org/ont-app/sparql-client/core#"
+   }
   (:require
    [clojure.string :as s]
    [clojure.java.io :as io]
    [clojure.spec.alpha :as spec]
    ;; 3rd party
    [selmer.parser :as selmer]
-   [taoensso.timbre :as log]
+   [taoensso.timbre :as timbre]
    ;; ont-app
+   [ont-app.graph-log.core :as glog]
    [ont-app.sparql-endpoint.core :as endpoint]
    [ont-app.igraph.core :as igraph :refer :all]
    [ont-app.igraph.graph :as graph]
@@ -14,7 +19,7 @@
    )
   (:gen-class))
 
-(log/set-level! :info)
+(timbre/set-level! :info)
 
 (declare query-for-normal-form)
 (declare query-for-subjects)
@@ -140,7 +145,7 @@ Where
                 (or binding-translator
                     (default-binding-translators query-url graph-uri))
                 auth)]
-    (log/debug (:graph-uri client))
+    (glog/debug ::starting-make-sparql-reader ::graph-uri (:graph-uri client))
     (if (:graph-uri client)
       
       (let [graph-qname (voc/qname-for (:graph-uri client))]
@@ -189,9 +194,8 @@ Where
                     (default-binding-translators query-url graph-uri))
                 update-url
                 auth)]
-    (log/debug (:graph-uri client))
+    (glog/debug ::starting-make-sparql-updater ::graph-uri (:graph-uri client)))
     (if (:graph-uri client)
-      
       (let [graph-qname (voc/qname-for (:graph-uri client))]
         (if-not (ask-endpoint client
                               (prefixed
@@ -279,11 +283,14 @@ Where
                      (endpoint/simplify sparql-binding
                                         (:binding-translator client)))
         ]
-    (log/debug query)
-    (log/debug (:query-url client))
-    (map simplifier
-         (endpoint/sparql-select (:query-url client)
-                                 query))))
+
+    (glog/debug-value
+     ::query-endpoint-return
+     [::query query
+      ::query-url (:query-url client)]
+     (map simplifier
+          (endpoint/sparql-select (:query-url client)
+                                  query)))))
 
 
 (defn ask-endpoint [client query]
@@ -292,8 +299,10 @@ Where
 <query> is a SPARQL ASK query
 <client> conforms to ::sparql-client spec
 "
-  (log/debug "query url:" (:query-url client))
-  (log/debug "query in ask:" query)
+  (glog/debug-value
+   ::ask-endpoint-return
+   [::query-url (:query-url client)
+    ::query query]
   (endpoint/sparql-ask (:query-url client)
                        query))
 
@@ -429,9 +438,11 @@ Where
                                    (fn[os] (set (conj os (:o b))))))
                                                 
         ]
-    (log/debug query)
-    (reduce collect-bindings {}
-            (query-endpoint client query))))
+    (glog/debug-value
+     ::query-for-po
+     [::query query ::subject s]
+     (reduce collect-bindings {}
+             (query-endpoint client query)))))
 
 (def query-for-o-template
   "
@@ -462,9 +473,13 @@ Where:
                            (conj acc (:o b)))
                                                 
         ]
-    (log/debug query)
-    (reduce collect-bindings #{}
-            (query-endpoint client query))))
+    (glog/debug-value
+     ::query-for-o-return
+     [::query query
+      ::subject s
+      ::predicate p]
+     (reduce collect-bindings #{}
+             (query-endpoint client query)))))
 
 (def ask-s-p-o-template
   "ASK where
@@ -491,8 +506,13 @@ Where:
                                   (voc/qname-for o)
                                   o)})))
         ]
-    (log/debug query)
-    (ask-endpoint client query)))
+    (glog/debug-value
+     ::ask-s-p-o-return
+     [::query query
+      ::subject s
+      ::predicate p
+      ::object o]
+     (ask-endpoint client query))))
 
 (defn update-endpoint [client update]
   "Side-effect: `update` is sent to `client`
@@ -500,9 +520,11 @@ Where
 <update> is a sparql update
 <client> is a SparqlUpdater
 "
-  (log/debug update)
-  (endpoint/sparql-update (:update-url client)
-                          (prefixed update)))
+  (glog/debug-value
+   ::update-endpoint-return
+   [::update update]
+   (endpoint/sparql-update (:update-url client)
+                           (prefixed update))))
 
 (def add-update-template
   "
@@ -565,8 +587,7 @@ Where
 (defmethod add-to-graph [SparqlUpdater :vector-of-vectors]
   [client triples]
 
-  (log/debug (prefixed
-              (add-triples-query client triples)))
+  (glog/log ::add-to-graph ::triples triples)
   (when-not (empty? triples)
     (update-endpoint client
                      (prefixed
