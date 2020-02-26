@@ -10,20 +10,22 @@ This revolves around two defrecords: `sparql-reader` for read-only
 access to a public server, and `sparql-updater` for updating a mutable graph.
 
 ## Contents
-- ### [Installation](#h2-installation)
-- ### [Usage](#h2-usage)
-- ### [Member access (both reader and updater)](#h2-member-access)
-  - #### [Querying](#h3-querying)
-    - ##### [The `prefixed` function, and namespace metadata](#h4-the-prefixed-function)
-    - ##### [Binding translation](#h4-binding-translation)
-- ### [sparql-updater](#h2-sparql-updater)
-- ### [Future work](#h2-future-work)
+- [Installation](#h2-installation)
+- [Usage](#h2-usage)
+- [Member access (both reader and updater)](#h2-member-access)
+  - [Querying](#h3-querying)
+    - [The `prefixed` function, and namespace metadata](#h4-the-prefixed-function)
+    - [Binding translation](#h4-binding-translation)
+- [sparql-updater](#h2-sparql-updater)
+- [Future work](#h2-future-work)
 
 
 <a name="h2-installation"></a>
 ## Installation
 
 [![Clojars Project](https://img.shields.io/clojars/v/ont-app/sparql-client.svg)](https://clojars.org/ont-app/sparql-client)
+
+Additional documentation is available at https://cljdoc.org/d/ont-app/sparql-client/0.1.0 .
 
 ```
 (defproject ...
