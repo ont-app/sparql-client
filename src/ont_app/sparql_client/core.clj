@@ -12,6 +12,7 @@
    [taoensso.timbre :as timbre]
    ;; ont-app
    [ont-app.graph-log.core :as glog]
+   [ont-app.graph-log.levels :as levels :refer :all]
    [ont-app.sparql-endpoint.core :as endpoint]
    [ont-app.igraph.core :as igraph :refer :all]
    [ont-app.igraph.graph :as graph]
@@ -19,7 +20,6 @@
    )
   (:gen-class))
 
-(timbre/set-level! :info)
 
 (declare query-for-normal-form)
 (declare query-for-subjects)
@@ -145,7 +145,7 @@ Where
                 (or binding-translator
                     (default-binding-translators query-url graph-uri))
                 auth)]
-    (glog/debug! ::starting-make-sparql-reader ::graph-uri (:graph-uri client))
+    (debug ::starting-make-sparql-reader ::graph-uri (:graph-uri client))
     (if (:graph-uri client)
       
       (let [graph-qname (voc/qname-for (:graph-uri client))]
@@ -194,7 +194,7 @@ Where
                     (default-binding-translators query-url graph-uri))
                 update-url
                 auth)]
-    (glog/debug! ::starting-make-sparql-updater ::graph-uri (:graph-uri client))
+    (debug ::starting-make-sparql-updater ::graph-uri (:graph-uri client))
     (if (:graph-uri client)
       (let [graph-qname (voc/qname-for (:graph-uri client))]
         (if-not (ask-endpoint client
@@ -284,7 +284,7 @@ Where
                                         (:binding-translator client)))
         ]
 
-    (glog/value-debug!
+    (value-debug
      ::query-endpoint-return
      [::query query
       ::query-url (:query-url client)]
@@ -299,7 +299,7 @@ Where
 <query> is a SPARQL ASK query
 <client> conforms to ::sparql-client spec
 "
-  (glog/value-debug!
+  (value-debug
    ::ask-endpoint-return
    [::query-url (:query-url client)
     ::query query]
@@ -438,7 +438,7 @@ Where
                                    (fn[os] (set (conj os (:o b))))))
                                                 
         ]
-    (glog/value-debug!
+    (value-debug
      ::query-for-po
      [::query query ::subject s]
      (reduce collect-bindings {}
@@ -473,7 +473,7 @@ Where:
                            (conj acc (:o b)))
                                                 
         ]
-    (glog/value-debug!
+    (value-debug
      ::query-for-o-return
      [::query query
       ::subject s
@@ -506,7 +506,7 @@ Where:
                                   (voc/qname-for o)
                                   o)})))
         ]
-    (glog/value-debug!
+    (value-debug
      ::ask-s-p-o-return
      [::query query
       ::subject s
@@ -520,7 +520,7 @@ Where
 <update> is a sparql update
 <client> is a SparqlUpdater
 "
-  (glog/value-debug!
+  (value-debug
    ::update-endpoint-return
    [::update update]
    (endpoint/sparql-update (:update-url client)
@@ -587,7 +587,7 @@ Where
 (defmethod add-to-graph [SparqlUpdater :vector-of-vectors]
   [client triples]
 
-  (glog/log! ::add-to-graph ::triples triples)
+  (debug ::add-to-graph ::triples triples)
   (when-not (empty? triples)
     (update-endpoint client
                      (prefixed

@@ -9,6 +9,7 @@
             [taoensso.timbre :as timbre]
             ;; ont-app
             [ont-app.graph-log.core :as glog]
+            [ont-app.graph-log.levels :as levels :refer :all]
             [ont-app.sparql-client.core :refer :all]
             [ont-app.sparql-endpoint.core :as endpoint]
             [ont-app.igraph.core :refer :all]
@@ -46,8 +47,8 @@ Where:
 (defn make-test-graph
   ([]
    (if (not @endpoint-ref)
-     (glog/fatal! ::no-endpoint
-                 :glog/message "No SPARQL_TEST_ENDPOINT variable defined")
+     (fatal ::no-endpoint
+            :glog/message "No SPARQL_TEST_ENDPOINT variable defined")
      (make-test-graph (ensure-final @endpoint-ref \/)
                       ::test-graph)))
   ([uri]
@@ -115,7 +116,7 @@ Where:
         (is (= (normal-form (subtract! g [::A ::B]))
                {})))
       ;; else
-      (glog/warn! ::no-endpoint
+      (warn ::no-endpoint
                   :glog/message
                   "No SPARQL_TEST_ENDPOINT env variable defined"))))
 
@@ -143,9 +144,9 @@ Where:
         (igraph-test/readme-mutable)
         )
       ;; else
-      (glog/warn! ::no-endpoint
-                  :glog/message
-                  "No SPARQL_TEST_ENDPOINT env variable defined"))))
+      (warn ::no-endpoint
+            :glog/message
+            "No SPARQL_TEST_ENDPOINT env variable defined"))))
 
 
     
