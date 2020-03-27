@@ -539,7 +539,15 @@ Where
   ")
 
 
-(defn quote [s] (str "\"" s "\""))
+(defn quote-str [s] (str "\"" s "\""))
+
+(defn maybe-tag-xsd-type [x]
+  (let [x (if (and (inst? x) (not (instance? java.time.Instant x)))
+            (.toInstant x)
+            x)
+        ]
+    (if-let[xsd-uri (endpoint/xsd-type-uri x)]
+      (str (quote-str x) "^^" (voc/qname-for (voc/keyword-for xsd-uri))))))
 
 (defn as-rdf [render-literal triple]
   "Returns a clause of rdf for `triple`, using `render-literal`
