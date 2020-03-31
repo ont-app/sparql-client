@@ -3,7 +3,7 @@
             [clojure.string :as s]
             [clojure.set :as set]
             [ont-app.graph-log.core :as glog]
-            [ont-app.sparql-client.core :refer :all]
+            [ont-app.sparql-client.core :as sparql :refer :all]
             [ont-app.sparql-endpoint.core :as endpoint]
             [ont-app.igraph.core :refer :all]
             [ont-app.igraph.graph :as graph]
@@ -87,3 +87,15 @@ WHERE
 
     ))
 
+
+(deftest check-ns-metadata-issue-3
+  (testing "Warn if there is no namespace metadata"
+    (glog/log-reset!)
+    (check-ns-metadata ::in-test-ns)
+    (check-ns-metadata :sparql-client/in-sparql-client-ns)
+    (check-ns-metadata ::sparql/in-sparql-client-ns)
+    (let [q (glog/query-log [[:?issue :rdf/type ::sparql/NoMetaDataInNS]])
+          ]
+      (is (= (count q) 1))
+      (is (= (the (:log/kwi (second (glog/ith-entry 0))))
+             ::in-test-ns)))))

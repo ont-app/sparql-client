@@ -410,14 +410,30 @@ Where
   }
   ")
 
+(defn check-ns-metadata [kwi]
+  "Logs a warning when `kwi` is in a namespace with no metadata."
+  (let [n (symbol (namespace kwi))]
+    (if-let [the-ns (find-ns n)]
+      (when (not (meta the-ns))
+        (warn ::NoMetaDataInNS
+              :glog/message "The namespace for {{log/kwi}} is in a namespace with no associated metadata."
+              :log/kwi kwi))))
+  kwi)
+
+
 (defn check-qname [uri-spec]
   "Traps the keyword assertion error in voc and throws a more meaningful error about blank nodes not being supported as first-class identifiers."
   (try
-    (voc/qname-for uri-spec)
+    (voc/qname-for (check-ns-metadata uri-spec))
     (catch java.lang.AssertionError e
       (if (= (str e)
              "java.lang.AssertionError: Assert failed: (keyword? kw)")
-        (throw (Error. (str "The URI spec " uri-spec " is not a keyword.\nCould it be a blank node?\nIf so, blank nodes cannot be treated as first-class identifiers in SPARQL. Use a dedicated query that traverses the blank node instead.")))
+        (throw (ex-info (str "The URI spec " uri-spec " is not a keyword.\nCould it be a blank node?\nIf so, blank nodes cannot be treated as first-class identifiers in SPARQL. Use a dedicated query that traverses the blank node instead.")
+                        (merge (ex-data e)
+                               {:type ::Non-Keyword-URI-spec
+                                ::uri-spec uri-spec
+                                })))
+                             
         ;; else it's some other message
         (throw e)))))
         
