@@ -539,9 +539,20 @@ Where
   ")
 
 
-(defn quote-str [s] (str "\"" s "\""))
+(defn quote-str [s]
+  "Returns `s`, in excaped quotation marks.
+Where
+<s> is a string, typically to be rendered in a query or RDF source.
+"
+  (str "\"" s "\""))
 
 (defn maybe-tag-xsd-type [x]
+  "Returns `x`, encoded as `x`^^xsd:<xsd-type-url>, or (quote-str x) 
+  if no xsd type can be found.
+Where
+<x> is a value to be rendered in a query or ttl source.
+NOTE: typically used as the <render-literal> arg to `as-rdf`
+"
   (let [x (if (and (inst? x) (not (instance? java.time.Instant x)))
             (.toInstant x)
             x)
