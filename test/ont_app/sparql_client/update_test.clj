@@ -48,7 +48,7 @@ Where:
   ([]
    (if (not @endpoint-ref)
      (fatal ::no-endpoint
-            :glog/message "No SPARQL_TEST_ENDPOINT variable defined")
+            :glog/message "No SPARQL_TEST_ENDPOINT variable defined, e.g. http://localhost:3030/my-dataset/")
      (make-test-graph (ensure-final @endpoint-ref \/)
                       ::test-graph)))
   ([uri]
@@ -118,7 +118,7 @@ Where:
       ;; else
       (warn ::no-endpoint
                   :glog/message
-                  "No SPARQL_TEST_ENDPOINT env variable defined"))))
+                  "No SPARQL_TEST_ENDPOINT variable defined, e.g. http://localhost:3030/my-dataset/"))))
 
 (deftest test-readme
   (testing "igraph readme stuff"
@@ -146,7 +146,7 @@ Where:
       ;; else
       (warn ::no-endpoint
             :glog/message
-            "No SPARQL_TEST_ENDPOINT env variable defined"))))
+            "No SPARQL_TEST_ENDPOINT variable defined, e.g. http://localhost:3030/my-dataset/"))))
 
 
     

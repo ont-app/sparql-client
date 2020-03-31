@@ -175,9 +175,9 @@ Where
 <auth> (optional)  is the authorization token needed to perform updates
 <uri-fn> := (fn [binding]...) -> URI representation. 
   Default is just the URI string
-<lang-fn> := (fn [binding] ...) -> parsed language tag. 
-   Default is just the language string with no
-<datatype-fn> := (fn [binding] -> Parsed datatype
+<lang-fn> := fn [binding] -> parsed language tag. 
+   Default is just the language string
+<datatype-fn> := fn [binding] -> Parsed datatype
 <binding> := {:value ... 
               :type ... 
               &maybe 
@@ -547,7 +547,9 @@ Where
             x)
         ]
     (if-let[xsd-uri (endpoint/xsd-type-uri x)]
-      (str (quote-str x) "^^" (voc/qname-for (voc/keyword-for xsd-uri))))))
+      (str (quote-str x) "^^" (voc/qname-for (voc/keyword-for xsd-uri)))
+      ;; else no xsd-tag found
+      (quote-str x))))
 
 (defn as-rdf [render-literal triple]
   "Returns a clause of rdf for `triple`, using `render-literal`
@@ -588,7 +590,8 @@ Where
   (selmer/render add-update-template
                  (merge (query-template-map client)
                         {:triples (s/join "\n"
-                                          (map (partial as-rdf quote)
+                                          (map (partial as-rdf
+                                                        maybe-tag-xsd-type)
                                                triples))
                          })))
 
@@ -642,7 +645,7 @@ Where
                  p-o))
           (triple-clause [triple]
             (if (= (count triple) 3)
-              (as-rdf quote triple)
+              (as-rdf maybe-tag-xsd-type triple)
               (as-query-clause (partial var-fn triple) triple)))
           (where-clause [triple]
             (if (= (count triple) 3)
