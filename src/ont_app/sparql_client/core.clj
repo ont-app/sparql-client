@@ -20,7 +20,53 @@
    )
   (:gen-class))
 
+;;;;;;;;;;;
+;; SPECS
+;;;;;;;;;;;
 
+(spec/def ::auth-key
+  #{:basic-auth :digest-auth :ntlm-auth :oauth-token})
+
+(spec/def ::basic-auth-value
+  (fn [v] (or (and (vector? v)
+                   (= (count v) 2)
+                   (string? (v 0))
+                   (string? (v 1)))
+              (and (string? v)
+                   (re-matches #".+:.+" v)))))
+
+(spec/def ::digest-auth-value
+  (fn [v] (and (= (count v) 2) (string? (v 0)) (string? (v 1)))))
+
+(spec/def ::ntlm-auth-value
+  (fn [v] (and (vector? v)
+               (= (count v) 4)
+               (string? (v 0))
+               (string? (v 1))
+               (string? (v 2))
+               (string? (v 3))
+               )))
+
+(spec/def ::oauth-token-value string?)
+
+(defn check-auth-value [k v]
+  (spec/valid?
+   (case k
+     :basic-auth ::basic-auth-value
+     :digest-auth ::digest-auth-value
+     :ntml-auth ::ntlm-auth-value
+     :oauth-token ::oauth-token-value)
+   v))
+
+(defn check-auth [m]
+  (or (nil? m)
+      (and (map? m)
+           (let [[[k v]] (seq m)]
+             (and (spec/valid? ::auth-key k)
+                  (check-auth-value k v))))))
+
+(spec/def ::auth check-auth)
+  
 (declare query-for-normal-form)
 (declare query-for-subjects)
 (declare query-for-p-o)
@@ -36,10 +82,14 @@ Where
 <query-url> is URL of a SPARQL query endpoint
 <binding-translator> := fn[<binding>] -> <simplified>
 <update-url> is the URL of the update endpoint (nil implies read-only)
-<auth> is the password or other authorization token
+<auth> := {<auth-key> <auth-value} specifying authorization, or nil
 <binding> is the value returned by a call to <query-url>
 <simplified> is a single scalar representation of a SPARQL binding. 
   See sparql-endpoint.core.
+<auth-key> :- #{:basic-auth, :digest-auth :ntlm-auth :oauth-token}
+<auth-value> is a value appropriate to <auth-key>, e.g.
+  [<user>, <pw>] for :basic-auth.
+  See https://github.com/dakrone/clj-http for details
 "
     }
     SparqlReader [graph-uri query-url binding-translator auth]
@@ -67,10 +117,14 @@ Where
 <query-url> is URL of a SPARQL query endpoint
 <binding-translator> := fn[<binding>] -> <simplified>
 <update-url> is the URL of the update endpoint (nil implies read-only)
-<auth> is the password or other authorization token
+<auth> := {<auth-key> <auth-value} specifying authorization, or nil
 <binding> is the value returned by a call to <query-url>
 <simplified> is a single scalar representation of a SPARQL binding. 
   See sparql-endpoint.core.
+<auth-key> :- #{:basic-auth, :digest-auth :ntlm-auth :oauth-token}
+<auth-value> is a value appropriate to <auth-key>, e.g.
+  [<user>, <pw>] for :basic-auth.
+  See https://github.com/dakrone/clj-http for details
 "
     }
     SparqlUpdater [graph-uri query-url binding-translator update-url auth]
@@ -116,8 +170,7 @@ Where
   CREATE GRAPH {{graph-qname|safe}}
   ")
 
-(defn make-sparql-reader [& {:keys
-                     [graph-uri query-url binding-translator auth]}]
+(defn make-sparql-reader
   "Returns an instance of SparqlReader.
 Where
 <graph-uri> is the named graph within the SPARQL endpoint. nil implies DEFAULT
@@ -139,6 +192,10 @@ Where
   SPARQL query.
   See also sparql-endpoint.core.
 "
+  [& {:keys
+      [graph-uri query-url binding-translator auth]}]
+  {:pre [(spec/valid? ::auth auth)]
+   }
   (let [client (->SparqlReader
                 graph-uri
                 query-url
@@ -162,9 +219,7 @@ Where
         ;;else we're using the default graph
       client)))
 
-(defn make-sparql-updater [& {:keys
-                              [graph-uri query-url binding-translator
-                               update-url auth]}]
+(defn make-sparql-updater 
   "Returns an instance of SparqlUpdater.
 Where
 <graph-uri> is the named graph within the SPARQL endpoint. nil implies DEFAULT
@@ -187,6 +242,11 @@ Where
   SPARQL query.
   See also sparql-endpoint.core.
 "
+  [& {:keys
+      [graph-uri query-url binding-translator
+       update-url auth]}]
+  {:pre [(spec/valid? ::auth auth)]
+   }
   (let [client (->SparqlUpdater
                 graph-uri
                 query-url
@@ -290,7 +350,9 @@ Where
       ::query-url (:query-url client)]
      (map simplifier
           (endpoint/sparql-select (:query-url client)
-                                  query)))))
+                                  query
+                                  (or (:auth client) {}) ;; http-req
+                                  )))))
 
 
 (defn ask-endpoint [client query]
@@ -304,7 +366,9 @@ Where
    [::query-url (:query-url client)
     ::query query]
   (endpoint/sparql-ask (:query-url client)
-                       query)))
+                       query
+                       (or (:auth client) {}) ;; http-req
+                       )))
 
 
 (defn- query-template-map [client]
@@ -540,7 +604,9 @@ Where
    ::update-endpoint-return
    [::update update]
    (endpoint/sparql-update (:update-url client)
-                           (prefixed update))))
+                           (prefixed update)
+                           (or (:auth client) {}) ;; http-req
+                           )))
 
 (def add-update-template
   "

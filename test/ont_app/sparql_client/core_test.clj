@@ -2,6 +2,7 @@
   (:require [clojure.test :refer :all]
             [clojure.string :as s]
             [clojure.set :as set]
+            [taoensso.timbre :as timbre]
             [ont-app.graph-log.core :as glog]
             [ont-app.sparql-client.core :as sparql :refer :all]
             [ont-app.sparql-endpoint.core :as endpoint]
@@ -91,7 +92,8 @@ WHERE
 (deftest check-ns-metadata-issue-3
   (testing "Warn if there is no namespace metadata"
     (glog/log-reset!)
-    (check-ns-metadata ::in-test-ns)
+    (timbre/with-config (merge timbre/*config* {:level :fatal})
+      (check-ns-metadata ::in-test-ns)) ;; just want to glog logging
     (check-ns-metadata :sparql-client/in-sparql-client-ns)
     (check-ns-metadata ::sparql/in-sparql-client-ns)
     (let [q (glog/query-log [[:?issue :rdf/type ::sparql/NoMetaDataInNS]])
