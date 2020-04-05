@@ -88,7 +88,7 @@ Where:
   simplified key/value map.
 - `update-endpoint` is a string indicating the URL of a SPARQL update
   query endpoint (sparql-updater only)
-- `authentication` is a password (as needed; defaults to  `nil`)
+- `authentication` is map with {_auth-key_ _auth-value_}, interpreted per [clj-http's authentication scheme](https://github.com/dakrone/clj-http#authentication)
 
 Each of these will produce a record that implements
 [ont-app/IGraph](https://github.com/ont-app/igraph).
