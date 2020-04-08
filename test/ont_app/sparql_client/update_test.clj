@@ -149,5 +149,23 @@ Where:
             "No SPARQL_TEST_ENDPOINT variable defined, e.g. http://localhost:3030/my-dataset/"))))
 
 
-    
+(deftest write-timestamps
+  (testing "Writing timestamps"
+  (if @endpoint-ref
+    (let [g (reset-client)
+          ]
+      (add! g [::a ::b #inst "2000"])
+      (def *g* g)
+      (is (= (the (g ::a ::b))
+             #inst "2000")))
+    ;; else
+    (when (empty? (glog/query-log [[:?nep :rdf/type ::no-endpoint]]))
+      (warn ::no-endpoint
+            :glog/message
+            "No SPARQL_TEST_ENDPOINT variable defined, e.g. http://localhost:3030/my-dataset/")))))
 
+
+
+(comment
+ 
+  )
