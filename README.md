@@ -18,6 +18,7 @@ access to a public server, and `sparql-updater` for updating a mutable graph.
     - [Binding translation](#h4-binding-translation)
 - [sparql-updater](#h2-sparql-updater)
 - [Future work](#h2-future-work)
+- [Acknowledgements](#h2-acknowledgements)
 
 
 <a name="h2-installation"></a>
@@ -356,6 +357,12 @@ Ordinary SPARQL updates can also be posed:
 
 * Authorization tokens still need to be implemented.
 * Literal object types are not infered and encoded with ^^xsd:* datatypes.
+
+<a name="h2-acknowledgements"></a>
+## Acknowledgements
+
+Thanks to [Abdullah Ibrahim](https://github.com/aibrahim) for his
+feedback and advice.
 
 ## License
 
