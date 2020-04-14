@@ -143,9 +143,9 @@ Since it implements IGraph and Ifn, we can make calls like the following, descri
 ;; -> 
 {:p/P4985 #{:wds/Q76-62b91a68-499a-47db-6786-87cdda9ff578},
  :rdfs/label
- #{:ugForm/باراك_ئوباما :mznForm/باراک_اوباما :pihForm/Barack_Obama
-   :mkForm/Барак_Обама :nahForm/Barack_Obama :gvForm/Barack_Obama
-   :nds-nlForm/Barack_Obama :urForm/بارک_اوباما :kaaForm/Barak_Obama
+ #{#langStr "Barack Obama@jv" #langStr "贝拉克·奥巴马@zh-my"
+   #langStr "Barack Obama@ga" #langStr "ബറാക്ക് ഒബാമ@ml"
+   #langStr "Barack Obama@map-bms" #langStr "ბარაკ ობამა@ka"
    ...
    }
  :wdt/P6385 #{"istoriya/OBAMA_BARAK_HUSEN.html"},
@@ -161,15 +161,16 @@ Let's say we're just interested in the labels...
 ```
 (client :wd/Q76 :rdfs/label)
 ;; ->
-#{:ugForm/باراك_ئوباما :mznForm/باراک_اوباما :pihForm/Barack_Obama
-   :mkForm/Барак_Обама :nahForm/Barack_Obama :gvForm/Barack_Obama
-   :nds-nlForm/Barack_Obama :urForm/بارک_اوباما :kaaForm/Barak_Obama
-   :en-caForm/Barack_Obama :asForm/বাৰাক_অ'বামা :rwForm/Barack_Obama
-   :zuForm/Barack_Obama :tgForm/Барак_Ҳусейн_Обама
-   :dsbForm/Barack_Obama :yiForm/באראק_אבאמא :brForm/Barack_Obama
-   :anForm/Barack_Obama :orForm/ବରାକ_ଓବାମା :sr-ecForm/Барак_Обама
-   :rmyForm/Barack_Obama :sr-elForm/Barak_Obama :bxrForm/Барак_Обама
-   :uzForm/Barack_Obama :fiForm/Barack_Obama :myvForm/Обамань_Барак
+#{{#langStr "Barack Obama@jv" #langStr "贝拉克·奥巴马@zh-my"
+  #langStr "Barack Obama@ga" #langStr "ബറാക്ക് ഒബാമ@ml"
+  #langStr "Barack Obama@map-bms" #langStr "ბარაკ ობამა@ka"
+  #langStr "Barack Obama@se" #langStr "贝拉克·奥巴马@zh-cn"
+  #langStr "Барак Обама@ru" #langStr "巴拉克·歐巴馬@zh-tw"
+  #langStr "Barack Obama@mt" #langStr "באראק אבאמא@yi"
+  #langStr "বাৰাক অ'বামা@as" #langStr "𐌱𐌰𐌹𐍂𐌰𐌺 𐍉𐌱𐌰𐌼𐌰@got"
+  #langStr "Барак Ҳусейн Обама@tg" #langStr "Barack Obama@tet"
+  #langStr "Barack Obama@lt" #langStr "Barack Obama@lfn"
+  #langStr "বারাক ওবামা@bn" #langStr "Barack Obama@ay"
    ...
 }
 
@@ -180,12 +181,12 @@ This returns the set of labels associated with the former president.
 ```
 > (def barry-labels (client :wd/Q76 :rdfs/label)]
 > ;; English...
-> (filter (comp #(re-find #"^enForm" (namespace %))) barry-labels)
-(:enForm/Barack_Obama)
+> (filter #(re-find #"^en$" (endpoint/lang %)) barry-labels)
+(#langStr "Barack Obama@en")
 >
 > ;; Chinese ...
-> (filter (comp #(re-find #"^zhForm" (namespace %))) barry-labels)
-(:zhForm/巴拉克·奧巴馬)
+> (filter #(re-find #"^zhForm" (namespace %)) barry-labels)
+(#langStr "巴拉克·奧巴馬@zh")
 >
 ```
 
@@ -278,10 +279,8 @@ By default, bindings in the result set are simplified as follows:
 
 * values tagged `xsd:type` (integers, time stamps, etc.) are parsed and interpreted
 * URIs are interned as namespaced keywords using `ont-app/vocabulary` 
-* values with language tags <lang> are interned as kewords of the form
-  `:<lang>Form/<string>`, with whitespace translated to underscores,
-  per namespaces defined in `vocabulary.linguistics`.  E.g. `"Barack
-  Obama"@en` becomes `:enForm/Barack_Obama`.
+* values with language tags <lang> are encoded as `LangStr` instances,
+  e.g. `#langStr "Barack Obama@en".
 
 See [ont-app/sparql-endpoint](https://github.com/ont-app/sparql-endpoint) for documentation on SPARQL binding simplification.
 See [ont-app/vocabulary](https://github.com/ont-app/vocabulary) for documentation on how namespaces may be annotated with metadata to inform URI translations.
@@ -292,7 +291,7 @@ Given the above, we can query the client thus:
 (query client (prefixed barry-query))
 
 ;; ->
-({:label :enForm/Barack_Obama})
+({:label #langStr "Barack Obama@en"})
 
 ```
 
@@ -366,6 +365,6 @@ feedback and advice.
 
 ## License
 
-Copyright © 2019 Eric D. Scott
+Copyright © 2019-20 Eric D. Scott
 
 Distributed under the Eclipse Public License.

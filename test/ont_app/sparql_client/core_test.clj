@@ -49,10 +49,10 @@ WHERE
   (testing "Test accessor functions"
     (is (= (:query-url client)
            "https://query.wikidata.org/bigdata/namespace/wdq/sparql"))
-    (is (= (filter (comp #(re-find #"^en$" (endpoint/lang %)))
+    (is (= (filter #(re-find #"^en$" (endpoint/lang %))
                    (client :wd/Q76 :rdfs/label))
            '(#langStr "Barack Obama@en")))
-    (is (= (filter (comp #(re-find #"^zh$" (endpoint/lang %)))
+    (is (= (filter #(re-find #"^zh$" (endpoint/lang %))
                    (client :wd/Q76 :rdfs/label))
            '(#langStr "巴拉克·奧巴馬@zh")))
     (is (= (client :wd/Q76 instance-of :wd/Q5)
