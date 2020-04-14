@@ -288,9 +288,6 @@ Where
   NOTE: <query-url> and <graph-uri> are used to handle blank nodes.
   "
   {
-   :test #(assert
-           (= (uri-translator nil nil {"value" "http://xmlns.com/foaf/0.1/homepage"})
-              :foaf:homepage))
    ;; TODO: add test for blank node
    }
   [sparql-binding]
@@ -327,7 +324,6 @@ Where
   [endpoint-url graph-uri]
   (merge endpoint/default-translators
          {:uri uri-translator
-          :lang form-translator
           :bnode (partial bnode-translator endpoint-url graph-uri)
           }))
 
@@ -339,20 +335,15 @@ Where
 <query> is a SPARQL SELECT query
 <client> is a SparqlReader or SparqlUpdater
 "
-  (let [simplifier (fn [sparql-binding]
-                     (endpoint/simplify sparql-binding
-                                        (:binding-translator client)))
-        ]
-
     (value-debug
      ::query-endpoint-return
      [::query query
       ::query-url (:query-url client)]
-     (map simplifier
+     (map (partial endpoint/simplify (:binding-translator client))
           (endpoint/sparql-select (:query-url client)
                                   query
                                   (or (:auth client) {}) ;; http-req
-                                  )))))
+                                  ))))
 
 
 (defn ask-endpoint [client query]
