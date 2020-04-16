@@ -17,6 +17,7 @@ access to a public server, and `sparql-updater` for updating a mutable graph.
     - [The `prefixed` function, and namespace metadata](#h4-the-prefixed-function)
     - [Binding translation](#h4-binding-translation)
 - [sparql-updater](#h2-sparql-updater)
+  - [load-rdf-file](#h3-load-rdf-file)
 - [Future work](#h2-future-work)
 - [Acknowledgements](#h2-acknowledgements)
 
@@ -349,6 +350,19 @@ Ordinary SPARQL updates can also be posed:
 (g)
 ;; ->
 {}
+```
+
+<a name="h3-load-rdf-file"></a>
+### `load-rdf-file`
+
+The multimethod `load-rdf-file` takes an updater and a path, and loads
+that path into the graph associated with the graph. The path can be a string, a java File, or a java URI object. Returned on success is the URI for the path.
+
+```
+> (load-rdf-file g "test/resources/dummy.ttl")
+INFO - Loading <yadda/yadda/test/resources/dummy.ttl> into uptest:dummy-test
+#object[java.net.URI 0x15ff92e4 "file://yadda/yadda/test/resources/dummy.ttl"]
+> 
 ```
 
 <a name="h2-future-work"></a>

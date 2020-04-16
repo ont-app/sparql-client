@@ -66,7 +66,27 @@
                   (check-auth-value k v))))))
 
 (spec/def ::auth check-auth)
-  
+
+;; VOCABULARY
+(def warn-on-no-ns-metadata-for-kwi?
+  "True when we should warn if there is no ns metadata found for the URI
+  being translated into a KWI in `kwi-for`.
+  "
+  (atom false))
+
+(def kwi-for
+  "Issues a warning if no ns metadata is found for the URI"
+  (partial
+   voc/keyword-for
+   (fn [uri kw]
+     (when @warn-on-no-ns-metadata-for-kwi?
+       (value-warn
+        ::NoNamespaceMetadataFound
+        [:glog/message "No ns metadata found for {{log/uri}}"
+         :log/uri uri]))
+     kw)))
+
+;; NEW DATATYPES 
 (declare query-for-normal-form)
 (declare query-for-subjects)
 (declare query-for-p-o)
@@ -291,7 +311,10 @@ Where
    ;; TODO: add test for blank node
    }
   [sparql-binding]
-  (voc/keyword-for (sparql-binding "value")))
+  (value-trace
+   ::URI_Translator
+   [:log/sparql-binding sparql-binding]
+   (kwi-for (sparql-binding "value"))))
 
 (defn bnode-translator
   "Returns <bnode-keyword> for `sparql-binding`
@@ -631,7 +654,7 @@ NOTE: typically used as the <render-literal> arg to `as-rdf`
             x)
         ]
     (if-let[xsd-uri (endpoint/xsd-type-uri x)]
-      (str (quote-str x) "^^" (voc/qname-for (voc/keyword-for xsd-uri)))
+      (str (quote-str x) "^^" (voc/qname-for (kwi-for xsd-uri)))
       ;; else no xsd-tag found
       (quote-str x))))
 
@@ -773,3 +796,51 @@ Where
                                         triples))))
 
 
+(defmulti load-rdf-file 
+  "Returns <file-uri> for `path`
+  Side-effect: loads contents of <file-uri> into (:graph-uri `g`)
+  Where
+  <file-uri> is a uri for <path>
+  <path> identifies a file containing RDF
+  <g> has a update-endpoint method.
+"
+  (fn [g path] [(type g) (type path)])
+  )
+
+(defmethod load-rdf-file [SparqlUpdater java.net.URI]
+  [g path]
+  (let [graph-uri (voc/qname-for (:graph-uri g))
+        directive (prefixed
+                   (selmer/render "LOAD <{{path}}> INTO GRAPH {{graph-uri}}"
+                                  {:path path
+                                   :graph-uri graph-uri
+                                   }))
+        ]
+    (info ::LoadingRDFFile
+          :glog/message "Loading <{{log/path}}> into {{log/graph-uri}}"
+          :log/path path
+          :log/graph-uri graph-uri)
+    (try (update-endpoint g directive)
+       (catch Throwable e
+         (throw (ex-info (str "Failed to load RDF file " path)
+                         (merge (ex-data e)
+                                {:type ::FailedToLoadRDFFile
+                                 :g g
+                                 :path path
+                                 :directive directive
+                                 }))))))
+  path)
+
+(defmethod load-rdf-file [SparqlUpdater java.io.File]
+  [g path]
+  (load-rdf-file g (java.net.URI. (str "file://" (.getAbsolutePath path)))))
+
+(defmethod load-rdf-file [SparqlUpdater java.lang.String]
+  [g path]
+  (load-rdf-file g (io/as-file path)))
+
+
+
+
+
+;;         file://" (.getAbsolutePath dummy) ">" " INTO GRAPH " (voc/qname-for (:graph-uri g)))))

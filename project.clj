@@ -16,6 +16,7 @@
                  [ont-app/vocabulary "0.1.1-SNAPSHOT"]
                  ]
   :target-path "target/%s"
+  :resource-path "test/resources"
   :plugins [[lein-codox "0.10.6"]]
   :codox {:output-path "doc"}
   :profiles {:uberjar {}})

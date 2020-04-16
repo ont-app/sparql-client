@@ -11,7 +11,7 @@
             ;; ont-app
             [ont-app.graph-log.core :as glog]
             [ont-app.graph-log.levels :as levels :refer :all]
-            [ont-app.sparql-client.core :refer :all]
+            [ont-app.sparql-client.core :as client :refer :all]
             [ont-app.sparql-endpoint.core :as endpoint]
             [ont-app.igraph.core :refer :all]
             [ont-app.igraph.graph :as graph]
@@ -20,6 +20,7 @@
             [ont-app.vocabulary.wikidata]
             [ont-app.vocabulary.linguistics]
             ))
+
 
 
 (glog/log-reset!)
@@ -72,7 +73,8 @@ Where:
    (make-sparql-updater
     :graph-uri uri
     :query-url (str endpoint "query")
-    :update-url (str endpoint "update"))))
+    :update-url (str endpoint "update")
+    )))
 
 
 (defn drop-all
@@ -173,6 +175,16 @@ Where:
             :glog/message
             "No SPARQL_TEST_ENDPOINT variable defined, e.g. http://localhost:3030/my-dataset/")))))
 
+
+(deftest read-rdf-file-issue-11
+  (testing "Read dummy file into graph"
+    (let [g (make-test-graph ::read-rdf-file-test)
+          ]
+      (is (= (type (load-rdf-file g "test/resources/dummy.ttl"))
+             java.net.URI))
+      (is (g :enForm/dog :rdf/type :en/EnglishForm))
+      (drop-client g)
+      )))
 
 (comment
  
