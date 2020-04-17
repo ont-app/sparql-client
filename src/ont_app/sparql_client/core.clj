@@ -67,6 +67,15 @@
 
 (spec/def ::auth check-auth)
 
+(defn bnode-kwi?
+  "True when `kwi` matches output of `bnode-translator`."
+  [kwi]
+  (->> (namespace kwi)
+       (re-matches #"^_.*")))
+
+(spec/def ::bnode-kwi bnode-kwi?)
+
+
 ;; VOCABULARY
 (def warn-on-no-ns-metadata-for-kwi?
   "True when we should warn if there is no ns metadata found for the URI
@@ -327,10 +336,20 @@ Where
   <graph-uri> is the URI of the graph
   "
   [query-url graph-uri sparql-binding]
+  {:post [(fn [kwi] (spec/valid? ::bnode-kwi kwi))]
+   }
   (keyword (str "_" (hash (str query-url graph-uri)))
            (sparql-binding "value")))
 
 
+(defn rdf-bnode
+  "Returns RDF string for `kwi` suitable for use as an element in an
+  INSERT clause. "
+  [kwi]
+  {:pre [(spec/valid? ::bnode-kwi kwi)]
+   }
+  (str "_:b" (subs (namespace kwi) 1) "_" (name kwi))
+  )
 
 (defn form-translator [sparql-binding]
   "Returns a keyword for  `binding` as a keyword URI for a natlex form"
@@ -358,15 +377,18 @@ Where
 <query> is a SPARQL SELECT query
 <client> is a SparqlReader or SparqlUpdater
 "
-    (value-debug
-     ::query-endpoint-return
-     [::query query
-      ::query-url (:query-url client)]
-     (map (partial endpoint/simplify (:binding-translator client))
-          (endpoint/sparql-select (:query-url client)
-                                  query
-                                  (or (:auth client) {}) ;; http-req
-                                  ))))
+  (let [dbg-query (debug ::StartingQueryEndpoint
+                         :log/query query
+                         :log/query-url (:query-url client))
+        ]
+  (value-debug
+   ::QueryEndpointResult
+   [:log/resultOf dbg-query]
+   (map (partial endpoint/simplify (:binding-translator client))
+        (endpoint/sparql-select (:query-url client)
+                                query
+                                (or (:auth client) {}) ;; http-req
+                                )))))
 
 
 (defn ask-endpoint [client query]
@@ -488,8 +510,9 @@ Where
   }
   ")
 
-(defn check-ns-metadata [kwi]
+(defn check-ns-metadata 
   "Logs a warning when `kwi` is in a namespace with no metadata."
+  [kwi]
   (let [n (symbol (namespace kwi))]
     (if-let [the-ns (find-ns n)]
       (when (not (meta the-ns))
@@ -501,19 +524,22 @@ Where
 
 (defn check-qname [uri-spec]
   "Traps the keyword assertion error in voc and throws a more meaningful error about blank nodes not being supported as first-class identifiers."
-  (try
-    (voc/qname-for (check-ns-metadata uri-spec))
-    (catch java.lang.AssertionError e
-      (if (= (str e)
-             "java.lang.AssertionError: Assert failed: (keyword? kw)")
-        (throw (ex-info (str "The URI spec " uri-spec " is not a keyword.\nCould it be a blank node?\nIf so, blank nodes cannot be treated as first-class identifiers in SPARQL. Use a dedicated query that traverses the blank node instead.")
-                        (merge (ex-data e)
-                               {:type ::Non-Keyword-URI-spec
-                                ::uri-spec uri-spec
-                                })))
+  (if (bnode-kwi? uri-spec)
+    uri-spec
+    ;;else not a blank node
+    (try
+      (voc/qname-for (check-ns-metadata uri-spec))
+      (catch java.lang.AssertionError e
+        (if (= (str e)
+               "java.lang.AssertionError: Assert failed: (keyword? kw)")
+          (throw (ex-info (str "The URI spec " uri-spec " is not a keyword.\nCould it be a blank node?\nIf so, blank nodes cannot be treated as first-class identifiers in SPARQL. Use a dedicated query that traverses the blank node instead.")
+                          (merge (ex-data e)
+                                 {:type ::Non-Keyword-URI-spec
+                                  ::uri-spec uri-spec
+                                  })))
                              
-        ;; else it's some other message
-        (throw e)))))
+          ;; else it's some other message
+          (throw e))))))
         
 (defn query-for-p-o [client s]
   "Returns {<p> #{<o>...}...} for `s` at endpoint of `client`
@@ -574,6 +600,45 @@ Where:
       ::predicate p]
      (reduce collect-bindings #{}
              (query-endpoint client query)))))
+
+^:traversal-fn
+(defn property-path
+  "Returns fn [g c a q] -> c a' q' for `path`
+  Where
+  <g> is an sparql update client
+  <c> is a tranversal context
+  <a> is an accumulator (typically a set)
+  <a'> has been conj'ed with the `?o` bindings <query>
+  <q> is an input q to the traversal
+  <q'> is the rest of <q>
+  <path> is a SPARQL property path, e.g. 'myns:prop1/myns:prop2'
+  <query> is `query-for-o-template`, with (first <q>) as subject and <path>
+    as the predicate. This binds a single var `?o`.
+  "
+  [path]
+  (fn [g c a q]
+    (let [query
+          (prefixed
+           (selmer/render
+            query-for-o-template
+            (merge (query-template-map g)
+                   {:subject (check-qname (first q))
+                    :predicate path})))
+          query-trace (trace ::PropertyPathQuery
+                              :log/path path
+                              :log/query query)
+          ]
+      [c, ;; unchanged context
+       ;; accumulate....
+       (let [result (value-trace
+                     ::PropertyPathQueryResult
+                     [:log/resultOf query-trace]
+                     (query-endpoint g query))
+             ]
+         (reduce conj a (map :o result))),
+       ;; queue....
+       (rest q)
+       ])))
 
 (def ask-s-p-o-template
   "ASK where
@@ -665,9 +730,14 @@ Where
 <render-literal> := (fn [o] ...) -> parsable rendering of <o> if <o> is 
   not a keyword (which would be treated as a URI and we'd use voc/qname-for)
 "
-  (let [render-element #(if (keyword? %)
-                          (voc/qname-for %)
-                          (render-literal %))
+  (let [render-element (fn [elt]
+                         (if (keyword? elt)
+                           (if (bnode-kwi? elt)
+                             (rdf-bnode elt)
+                             ;; else not a bnode...
+                             (voc/qname-for elt))
+                           ;; else not a keyword...
+                           (render-literal elt)))
         ]
     (str (s/join  " " (map render-element triple))
          ".")))

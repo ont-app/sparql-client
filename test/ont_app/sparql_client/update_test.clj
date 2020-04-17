@@ -175,6 +175,39 @@ Where:
             :glog/message
             "No SPARQL_TEST_ENDPOINT variable defined, e.g. http://localhost:3030/my-dataset/")))))
 
+(deftest write-blank-nodes-issue-8
+  #_(glog/log-reset! (add glog/ontology
+                        [:glog/LogGraph :glog/level :glog/DEBUG]))
+  (testing "Write a blank node to the test graph"
+    (let [g (make-test-graph ::write-blank-node-test)
+          add-statement (prefixed "INSERT en:EnglishForm en:blah _b2. _b2 a en:blah")
+          ]
+      (load-rdf-file g "test/resources/dummy.ttl")
+      (is (= (into
+              #{}
+              (query-endpoint
+               g
+               (prefixed 
+                "SELECT ?p ?o
+                WHERE
+                { 
+                  Graph uptest:write-blank-node-test
+                  { 
+                    en:EnglishForm rdfs:subClassOf ?restriction.
+                    ?restriction ?p ?o.
+                  }
+                 }")))
+             #{{:p :rdf/type, :o :owl/Restriction}
+               {:p :owl/onProperty, :o :dct/language}
+               {:p :owl/hasValue, :o :iso639/eng}}))
+             
+      (add! g [[:en/EnglishForm ::assoc :_/dummy]
+               [:_/dummy :rdfs/label "dummy for EnglishForm"]])
+      (is (= (the (g :en/EnglishForm (property-path "uptest:assoc/rdfs:label")))
+             "dummy for EnglishForm"))
+      (drop-client g)
+      )))
+
 
 (deftest read-rdf-file-issue-11
   (testing "Read dummy file into graph"
@@ -187,6 +220,7 @@ Where:
       )))
 
 
+      
 (comment
  
   )

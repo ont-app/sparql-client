@@ -295,6 +295,106 @@ Given the above, we can query the client thus:
 ({:label #langStr "Barack Obama@en"})
 
 ```
+<a name="h5-blank-nodes"></a>
+##### Blank nodes
+
+Supporting RDF-based representations requires support of [blank
+nodes](https://www.wikidata.org/wiki/Q3427875). 
+
+Reading blank nodes from SPARQL results by default is done by ???,
+which produces a KWI interned in a namespace bound to the hash of the
+graph. There is no metadata bound to this namespace.
+
+Each blank node KWI matches the function `bnode-kwi?`, and spec `::bnode-kwi`.
+
+These blank nodes will be rendered when we translate the graph into
+normal form, but there are limits to its effectiveness in identifying
+the original blank node in the SPARQL endpoint, since blank nodes are
+only really valid within the scope of a single query or update directive.
+
+Thus we could use the following expression to define an OWL definition
+for `EnglishForm`, which is a language form guaranteed to be in
+English, conforming to the OWL standard requiring that [Restrictions
+must be expressed using blank nodes](https://www.w3.org/TR/owl-ref/#Restrictions):
+
+```
+> (add! lexicon
+        [[:en/EnglishForm
+          :rdfs/subClassof :ontolex/Form
+          :rdfs/subClassof :_/InEnglish]
+          [:_/InEnglish 
+           :rdf/type :owl/Restriction
+           :owl/onProperty :dct/language
+           :owl/hasValue :iso639/eng]])
+
+> (lexicon)
+{...
+  :en/EnglishForm
+     #:rdfs{:subClassOf #{:ontolex/Form :_-1352721862/b0}},
+  :_-1352721862/b0
+    {:rdf/type #{:owl/Restriction},
+     :owl/onProperty #{:dct/language},
+     :owl/hasValue #{:iso639/eng}},
+  ...
+}
+```
+But this makes accessor functions against blank nodes problematic:
+
+```
+> (lexicon :en/EnglishForm)
+#:rdfs{:subClassOf #{:ontolex/Form :_-1352721862/b0}}
+>
+> (lexicon  :_-1352721862/b0)
+--> ERROR
+> 
+```
+
+So in cases where you intend to make use of blank nodes, you may want
+to make use of the `property-path` traversal function descussed
+[below](#h5-sparql-property-paths), or simply use the `query-endpoint`
+function with a fully specified SPARQL query.
+
+```
+> (query-endpoint lexicon 
+  (prefixed 
+   "SELECT ?p ?o
+    WHERE
+    { 
+      Graph uptest:owl-demo
+      { 
+        en:EnglishForm rdfs:subClassOf ?restriction.
+        ?restriction ?p ?o.
+      }
+     }"
+     ))
+({:p :rdf/type, :o :owl/Restriction}
+ {:p :owl/onProperty, :o :dct/language}
+ {:p :owl/hasValue, :o :iso639/eng}) 
+>
+```
+
+If you're among those who try to minimize or eliminate any use of
+blank nodes, be advised that the
+[mint-kwi](https://cljdoc.org/d/ont-app/igraph-vocabulary/0.1.0/api/ont-app.igraph-vocabulary.core#mint-kwi)
+method is offered as an alternative.
+
+<a name="h5-sparql-property-paths"></a>
+##### SPARQL property paths
+
+One of the nice features of SPARQL is its support for [property
+paths](https://www.w3.org/TR/sparql11-property-paths/), which inspired
+many of igraph's traversal utilities such as _transitive-closure_.
+
+The function `property-path` takes a string expressing a SPARQL
+property path, and returns a traversal function that applies it.
+
+For example in the blank nodes example above:
+
+```
+> (lexicon :en/EnglishForm (property-path "rdfs:subClassOf/owl:hasValue"))
+#{:iso639/eng}
+> 
+```
 
 <a name="h2-sparql-updater"></a>
 ## sparql-updater

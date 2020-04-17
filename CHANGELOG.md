@@ -13,3 +13,7 @@ All notable changes to this project will be documented in this file. This change
 - Added a check-ns-metadata function, called in check-qname. This will
   issue a warning if a kwi is being interned in a namespace with no
   metadata.
+- Blank nodes are now properly supported in add! operations.
+- There is a function `property-path`, which takes a SPARQL property
+  path string and return a traversal function suitable as a `p`
+  argument to accessor functions.
