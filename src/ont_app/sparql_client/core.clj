@@ -679,13 +679,16 @@ Where
 <update> is a sparql update
 <client> is a SparqlUpdater
 "
+  (let [start-state (debug ::StartingUpdateEndpoint
+                           :log/update (prefixed update))
+        ]
   (value-debug
-   ::update-endpoint-return
-   [::update update]
+   ::UpdateEndpointResult
+   [:log/resultOf start-state]
    (endpoint/sparql-update (:update-url client)
                            (prefixed update)
                            (or (:auth client) {}) ;; http-req
-                           )))
+                           ))))
 
 (def add-update-template
   "
@@ -723,13 +726,16 @@ NOTE: typically used as the <render-literal> arg to `as-rdf`
       ;; else no xsd-tag found
       (quote-str x))))
 
-(defn as-rdf [render-literal triple]
-  "Returns a clause of rdf for `triple`, using `render-literal`
+(defn as-rdf 
+  "Returns a clause of rdf for `igraph-vector`, using `render-literal`
 Where
-<triple> := [<s> <p> <o>]
+  <igraph-vector> := [<s> <p> <o> & maybe <p> <o>, ...]
 <render-literal> := (fn [o] ...) -> parsable rendering of <o> if <o> is 
   not a keyword (which would be treated as a URI and we'd use voc/qname-for)
 "
+  [render-literal igraph-vector]
+  {:pre [(spec/valid? ::igraph/vector igraph-vector)]
+   }
   (let [render-element (fn [elt]
                          (if (keyword? elt)
                            (if (bnode-kwi? elt)
@@ -738,15 +744,20 @@ Where
                              (voc/qname-for elt))
                            ;; else not a keyword...
                            (render-literal elt)))
+        render-p-o (fn [p-o]
+                     (s/join  " " (map render-element p-o)))
         ]
-    (str (s/join  " " (map render-element triple))
+    (str (render-element (first igraph-vector))
+         "\n"
+         (s/join ";\n" (map render-p-o (partition 2 (rest igraph-vector))))
          ".")))
 
-(defn as-query-clause [var-fn partial-triple]
+(defn as-query-clause 
   "Returns a clause of SPARQL with variables to fill out the rest of `partial-triple`
 Where
 <partial-triple> := [<s>] or [<s> <p>]
 "
+  [var-fn partial-triple]
   (case (count partial-triple)
     1 (let [[s] partial-triple]
         (assert (keyword? s))
@@ -764,6 +775,8 @@ Where
                         :o-var (var-fn "o")}))))
 
 (defn add-triples-query [client triples]
+  {:pre [(spec/valid? ::igraph/vector-of-vectors triples)]
+   }
   (selmer/render add-update-template
                  (merge (query-template-map client)
                         {:triples (s/join "\n"
@@ -784,12 +797,13 @@ Where
 
 (defmethod add-to-graph [SparqlUpdater :vector]
   [client triple]
-  (add-to-graph client [triple]))
+  (add-to-graph client ^:vector-of-vectors [triple]))
 
 (defmethod add-to-graph [SparqlUpdater :normal-form]
   [client triples]
   (add-to-graph
    client
+   ^:vector-of-vectors
    (reduce-spo (fn [v s p o]
                  (conj v [s p o]))
                []

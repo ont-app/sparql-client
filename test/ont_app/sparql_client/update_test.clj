@@ -208,6 +208,26 @@ Where:
       (drop-client g)
       )))
 
+(deftest write-langstr-issue-10
+  (glog/log-reset! (add glog/ontology
+                        [:glog/LogGraph :glog/level :glog/DEBUG]))
+  (testing "Write langstr to the test graph"
+    (let [g (make-test-graph ::write-langstr-test)
+          add-statement (prefixed "INSERT en:EnglishForm en:blah _b2. _b2 a en:blah")
+          ]
+      (load-rdf-file g "test/resources/dummy.ttl")
+      
+             
+      (add! g [[:enForm/cat
+                :rdf/type :en/EnglishForm
+                 :ontolex/writtenRep #langStr "cat@en"
+                ]])
+            
+      (is (= (the (g :enForm/cat :ontolex/writtenRep))
+             #langStr "cat@en"))
+      (drop-client g)
+      )))
+
 
 (deftest read-rdf-file-issue-11
   (testing "Read dummy file into graph"
