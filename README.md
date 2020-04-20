@@ -310,7 +310,7 @@ queries or UPDATE directives, literals are translated using the
 `render-literal-dispatch`, which breaks out _#inst_'s and _xsd-type_s
 as special cases, and otherwise returns (type-of _literal_).
 
-The method for LangStr renders `#langStr "cat@en"` as `"\"cat\"@en`.
+The method for LangStr renders `#langStr "cat@en"` as `"\"cat\"@en"`.
 
 Otherwise default behavior is to render the value in quotes, using the
 `quote-str` function := `["str"] -> "\"str\""`.
@@ -498,12 +498,6 @@ INFO - Loading <yadda/yadda/test/resources/dummy.ttl> into uptest:dummy-test
 #object[java.net.URI 0x15ff92e4 "file://yadda/yadda/test/resources/dummy.ttl"]
 > 
 ```
-
-<a name="h2-future-work"></a>
-## Future work
-
-* Authorization tokens still need to be implemented.
-* Literal object types are not infered and encoded with ^^xsd:* datatypes.
 
 <a name="h2-acknowledgements"></a>
 ## Acknowledgements
