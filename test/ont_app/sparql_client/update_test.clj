@@ -220,11 +220,12 @@ Where:
              
       (add! g [[:enForm/cat
                 :rdf/type :en/EnglishForm
-                 :ontolex/writtenRep #langStr "cat@en"
+                :ontolex/writtenRep #langStr "cat@en"
+                ::tokenCount 1
                 ]])
             
-      (is (= (the (g :enForm/cat :ontolex/writtenRep))
-             #langStr "cat@en"))
+      (is (g :enForm/cat :ontolex/writtenRep #langStr "cat@en"))
+      (is (g :enForm/cat ::tokenCount 1))
       (drop-client g)
       )))
 

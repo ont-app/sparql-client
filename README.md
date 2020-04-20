@@ -16,6 +16,9 @@ access to a public server, and `sparql-updater` for updating a mutable graph.
   - [Querying](#h3-querying)
     - [The `prefixed` function, and namespace metadata](#h4-the-prefixed-function)
     - [Binding translation](#h4-binding-translation)
+      - [The `render-literal` multimethod](#h5-the-render-literal-multimethod)
+      - [Blank nodes](#h5-blank-nodes)
+      - [SPARQL property paths](#h5-sparql-property-paths)
 - [sparql-updater](#h2-sparql-updater)
   - [load-rdf-file](#h3-load-rdf-file)
 - [Future work](#h2-future-work)
@@ -279,6 +282,7 @@ namespaces.
 By default, bindings in the result set are simplified as follows:
 
 * values tagged `xsd:type` (integers, time stamps, etc.) are parsed and interpreted
+* Custom datatypes :~ "myvalue"^^myNs:myDatatype are interpreted as refied objects _x_ s.t. `(str x) -> "myValue"`, with metadata `{:datatype :myNs/myDatatype}`
 * URIs are interned as namespaced keywords using `ont-app/vocabulary` 
 * values with language tags <lang> are encoded as `LangStr` instances,
   e.g. `#langStr "Barack Obama@en".
@@ -295,6 +299,36 @@ Given the above, we can query the client thus:
 ({:label #langStr "Barack Obama@en"})
 
 ```
+
+<a name="h5-the-render-literal-multimethod"></a>
+##### The `render-literal` multimethod
+
+Any graph element represented as a keyword is assumed to be a KWI, and
+all other graph elements are assumed to be literals. When generating
+queries or UPDATE directives, literals are translated using the
+`render-literal` multimethod, dispatched on the output of
+`render-literal-dispatch`, which breaks out _#inst_'s and _xsd-type_s
+as special cases, and otherwise returns (type-of _literal_).
+
+The method for LangStr renders `#langStr "cat@en"` as `"\"cat\"@en`.
+
+Otherwise default behavior is to render the value in quotes, using the
+`quote-str` function := `["str"] -> "\"str\""`.
+
+It should be straightforward to write homo-iconic custom records as RDF:
+
+```
+> (defmethod render-literal (type (make-my-record))
+   [record]
+   (str (quote-str (str record)) "^^" (voc/qname-for :myNs/MyRecord)))
+```
+
+You would then need to write a custom _:datatype_ simplifier (described above
+and in
+[ont-app/sparql-endpoint](https://github.com/ont-app/sparql-endpoint))
+to re-interpret them as compiled objects.
+
+
 <a name="h5-blank-nodes"></a>
 ##### Blank nodes
 

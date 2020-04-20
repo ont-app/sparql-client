@@ -60,8 +60,8 @@ WHERE
     #_(is (= ((:rdfs/label (client :wd/Q76)) #langStr "Barack Obama@en")
              #langStr "Barack Obama@en"))
     ;; ... TODO
-    (is (= (client :wd/Q76 :rdfs/label "\"Barack Obama\"@en")
-           true))
+    (is (client :wd/Q76 :rdfs/label #langStr "Barack Obama@en"))
+
     (is (= (vec (query client (prefixed
                                what-is-spanish-for-human?)))
            [{:esLabel #langStr "ser humano@es"}]))

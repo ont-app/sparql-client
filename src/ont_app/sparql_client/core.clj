@@ -95,6 +95,123 @@
          :log/uri uri]))
      kw)))
 
+;; RENDERING AND READING RDF ELEMENTS
+
+(defn uri-translator
+  "Returns <qualified-keyword> for `sparql-binding`
+  Where
+  <qualified-keyword> is a keyword in voc-re format
+  <sparql-binding> := {?value ...}, typically returned from a query
+  <query-url> is the URL of the query endpoint
+  <graph-uri> is the URI of the graph
+  NOTE: <query-url> and <graph-uri> are used to handle blank nodes.
+  "
+  {
+   ;; TODO: add test for blank node
+   }
+  [sparql-binding]
+  (value-trace
+   ::URI_Translator
+   [:log/sparql-binding sparql-binding]
+   (kwi-for (sparql-binding "value"))))
+
+(defn bnode-translator
+  "Returns <bnode-keyword> for `sparql-binding`
+  Where
+  <bnode-keyword> is a keyword guaranteed to be unique even if merged
+    with data from other endpoints and graphs
+  <sparql-binding> := {'type' 'bnode', :value ..., ...}, typically returned
+    from a query
+  <query-url> is the URL of the query endpoint
+  <graph-uri> is the URI of the graph
+  "
+  [query-url graph-uri sparql-binding]
+  {:post [(fn [kwi] (spec/valid? ::bnode-kwi kwi))]
+   }
+  (keyword (str "_" (hash (str query-url graph-uri)))
+           (sparql-binding "value")))
+
+
+(defn rdf-bnode
+  "Returns RDF string for `kwi` suitable for use as an element in an
+  INSERT clause. "
+  [kwi]
+  {:pre [(spec/valid? ::bnode-kwi kwi)]
+   }
+  (str "_:b" (subs (namespace kwi) 1) "_" (name kwi))
+  )
+
+(defn form-translator [sparql-binding]
+  "Returns a keyword for  `binding` as a keyword URI for a natlex form"
+  (keyword (str (sparql-binding "xml:lang")
+                "Form")
+           (s/replace (sparql-binding "value")
+                      " "
+                      "_")))
+
+(defn default-binding-translators
+  "Binding translators used to simplify bindings. See sparq-endpoint.core
+  <endpoint-url> and <graph-uri> are used to mint unique values for bnodes.
+  "
+  [endpoint-url graph-uri]
+  (merge endpoint/default-translators
+         {:uri uri-translator
+          :bnode (partial bnode-translator endpoint-url graph-uri)
+          }))
+
+
+(defn quote-str [s]
+  "Returns `s`, in excaped quotation marks.
+Where
+<s> is a string, typically to be rendered in a query or RDF source.
+"
+  (str "\"" s "\""))
+
+(defn render-literal-dispatch
+  "Returns a key for the render-literal method to dispatch on given `literal`
+  Where
+  <literal> is any non-keyword
+  NOTE: ::instant and ::xsd-type are special cases, otherwise (type <literal>)
+  "
+  [literal]
+  (value-trace
+   ::RenderLiteralDispatch
+   [:log/iteral literal]
+   (cond 
+     (inst? literal) ::instant
+     (endpoint/xsd-type-uri literal) ::xsd-type
+     :default (type literal))))
+
+(defmulti render-literal
+  "Returns an RDF (Turtle) rendering of `literal`"
+  render-literal-dispatch)
+
+
+(defmethod render-literal ::instant
+  [instant]
+  (let [xsd-uri (endpoint/xsd-type-uri
+                 (if (not (instance? java.time.Instant instant))
+                   (.toInstant instant)
+                   instant))
+        ]
+    (str (quote-str (.toInstant instant))
+         "^^"
+         (voc/qname-for (kwi-for xsd-uri)))))
+
+(defmethod render-literal ::xsd-type
+  [xsd-value]
+  (let [xsd-uri (endpoint/xsd-type-uri xsd-value)]
+    (str (quote-str xsd-value) "^^" (voc/qname-for (kwi-for xsd-uri)))))
+
+(defmethod render-literal (type #langStr "@en")
+  [lang-str]
+  (str (quote-str (str lang-str)) "@" (endpoint/lang lang-str)))
+
+(defmethod render-literal :default
+  [s]
+  (quote-str s)
+  )
+
 ;; NEW DATATYPES 
 (declare query-for-normal-form)
 (declare query-for-subjects)
@@ -307,68 +424,6 @@ Where
 
 
 
-(defn uri-translator
-  "Returns <qualified-keyword> for `sparql-binding`
-  Where
-  <qualified-keyword> is a keyword in voc-re format
-  <sparql-binding> := {?value ...}, typically returned from a query
-  <query-url> is the URL of the query endpoint
-  <graph-uri> is the URI of the graph
-  NOTE: <query-url> and <graph-uri> are used to handle blank nodes.
-  "
-  {
-   ;; TODO: add test for blank node
-   }
-  [sparql-binding]
-  (value-trace
-   ::URI_Translator
-   [:log/sparql-binding sparql-binding]
-   (kwi-for (sparql-binding "value"))))
-
-(defn bnode-translator
-  "Returns <bnode-keyword> for `sparql-binding`
-  Where
-  <bnode-keyword> is a keyword guaranteed to be unique even if merged
-    with data from other endpoints and graphs
-  <sparql-binding> := {'type' 'bnode', :value ..., ...}, typically returned
-    from a query
-  <query-url> is the URL of the query endpoint
-  <graph-uri> is the URI of the graph
-  "
-  [query-url graph-uri sparql-binding]
-  {:post [(fn [kwi] (spec/valid? ::bnode-kwi kwi))]
-   }
-  (keyword (str "_" (hash (str query-url graph-uri)))
-           (sparql-binding "value")))
-
-
-(defn rdf-bnode
-  "Returns RDF string for `kwi` suitable for use as an element in an
-  INSERT clause. "
-  [kwi]
-  {:pre [(spec/valid? ::bnode-kwi kwi)]
-   }
-  (str "_:b" (subs (namespace kwi) 1) "_" (name kwi))
-  )
-
-(defn form-translator [sparql-binding]
-  "Returns a keyword for  `binding` as a keyword URI for a natlex form"
-  (keyword (str (sparql-binding "xml:lang")
-                "Form")
-           (s/replace (sparql-binding "value")
-                      " "
-                      "_")))
-
-(defn default-binding-translators
-  "Binding translators used to simplify bindings. See sparq-endpoint.core
-  <endpoint-url> and <graph-uri> are used to mint unique values for bnodes.
-  "
-  [endpoint-url graph-uri]
-  (merge endpoint/default-translators
-         {:uri uri-translator
-          :bnode (partial bnode-translator endpoint-url graph-uri)
-          }))
-
 (defn query-endpoint [client query]
   "Returns [<simplified-binding> ...] for `query` posed to `client`
 Where
@@ -397,14 +452,17 @@ Where
 <query> is a SPARQL ASK query
 <client> conforms to ::sparql-client spec
 "
-  (value-debug
-   ::ask-endpoint-return
-   [::query-url (:query-url client)
-    ::query query]
-  (endpoint/sparql-ask (:query-url client)
-                       query
-                       (or (:auth client) {}) ;; http-req
-                       )))
+  (let [starting (debug ::StartingAskEndpoint
+                        :log/queryUrl (:query-url client)
+                        :log/query query)
+        ]
+    (value-debug
+     ::ask-endpoint-return
+     [:log/resultOf starting]
+     (endpoint/sparql-ask (:query-url client)
+                          query
+                          (or (:auth client) {}) ;; http-req
+                          ))))
 
 
 (defn- query-template-map [client]
@@ -663,14 +721,16 @@ Where:
                         :predicate (check-qname p)
                         :object (if (keyword? o)
                                   (voc/qname-for o)
-                                  o)})))
+                                  (render-literal o))})))
+        starting (debug ::Starting_ask-s-p-o
+                        :log/query query
+                        :log/subject s
+                        :log/predicate p
+                        :log/object o)
         ]
     (value-debug
      ::ask-s-p-o-return
-     [::query query
-      ::subject s
-      ::predicate p
-      ::object o]
+     [:log/resultOf starting]
      (ask-endpoint client query))))
 
 (defn update-endpoint [client update]
@@ -703,54 +763,32 @@ Where
   ")
 
 
-(defn quote-str [s]
-  "Returns `s`, in excaped quotation marks.
-Where
-<s> is a string, typically to be rendered in a query or RDF source.
-"
-  (str "\"" s "\""))
-
-(defn maybe-tag-xsd-type [x]
-  "Returns `x`, encoded as `x`^^xsd:<xsd-type-url>, or (quote-str x) 
-  if no xsd type can be found.
-Where
-<x> is a value to be rendered in a query or ttl source.
-NOTE: typically used as the <render-literal> arg to `as-rdf`
-"
-  (let [x (if (and (inst? x) (not (instance? java.time.Instant x)))
-            (.toInstant x)
-            x)
-        ]
-    (if-let[xsd-uri (endpoint/xsd-type-uri x)]
-      (str (quote-str x) "^^" (voc/qname-for (kwi-for xsd-uri)))
-      ;; else no xsd-tag found
-      (quote-str x))))
-
 (defn as-rdf 
   "Returns a clause of rdf for `igraph-vector`, using `render-literal`
 Where
   <igraph-vector> := [<s> <p> <o> & maybe <p> <o>, ...]
-<render-literal> := (fn [o] ...) -> parsable rendering of <o> if <o> is 
-  not a keyword (which would be treated as a URI and we'd use voc/qname-for)
+  <render-literal> := (fn [o] ...) -> parsable rendering of <o> if <o> is 
+  not a KWI (which would be treated as a URI and we'd use voc/qname-for)
+  This is optional. Default is `render-standard-literal`
 "
-  [render-literal igraph-vector]
-  {:pre [(spec/valid? ::igraph/vector igraph-vector)]
-   }
-  (let [render-element (fn [elt]
-                         (if (keyword? elt)
-                           (if (bnode-kwi? elt)
-                             (rdf-bnode elt)
-                             ;; else not a bnode...
-                             (voc/qname-for elt))
-                           ;; else not a keyword...
-                           (render-literal elt)))
-        render-p-o (fn [p-o]
-                     (s/join  " " (map render-element p-o)))
-        ]
-    (str (render-element (first igraph-vector))
-         "\n"
-         (s/join ";\n" (map render-p-o (partition 2 (rest igraph-vector))))
-         ".")))
+   [igraph-vector]
+   {:pre [(spec/valid? ::igraph/vector igraph-vector)]
+    }
+   (let [render-element (fn [elt]
+                          (if (keyword? elt)
+                            (if (bnode-kwi? elt)
+                              (rdf-bnode elt)
+                              ;; else not a bnode...
+                              (voc/qname-for elt))
+                            ;; else not a keyword...
+                            (render-literal elt)))
+         render-p-o (fn [p-o]
+                      (s/join  " " (map render-element p-o)))
+         ]
+     (str (render-element (first igraph-vector))
+          "\n"
+          (s/join ";\n" (map render-p-o (partition 2 (rest igraph-vector))))
+          ".")))
 
 (defn as-query-clause 
   "Returns a clause of SPARQL with variables to fill out the rest of `partial-triple`
@@ -780,8 +818,7 @@ Where
   (selmer/render add-update-template
                  (merge (query-template-map client)
                         {:triples (s/join "\n"
-                                          (map (partial as-rdf
-                                                        maybe-tag-xsd-type)
+                                          (map as-rdf 
                                                triples))
                          })))
 
@@ -836,7 +873,7 @@ Where
                  p-o))
           (triple-clause [triple]
             (if (= (count triple) 3)
-              (as-rdf maybe-tag-xsd-type triple)
+              (as-rdf triple)
               (as-query-clause (partial var-fn triple) triple)))
           (where-clause [triple]
             (if (= (count triple) 3)
