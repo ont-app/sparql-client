@@ -10,15 +10,23 @@
    ;; 3rd party
    [selmer.parser :as selmer]
    [taoensso.timbre :as timbre]
+   [cognitect.transit :as transit]
    ;; ont-app
    [ont-app.graph-log.core :as glog]
    [ont-app.graph-log.levels :as levels :refer :all]
    [ont-app.sparql-endpoint.core :as endpoint]
    [ont-app.igraph.core :as igraph :refer :all]
    [ont-app.igraph.graph :as graph]
+   [ont-app.sparql-client.ont :as ont]
    [ont-app.vocabulary.core :as voc]
    )
+  (:import
+   [java.io ByteArrayInputStream ByteArrayOutputStream]
+   [ont_app.sparql_endpoint.core LangStr]
+   )
   (:gen-class))
+
+(def ontology @ont/ontology-atom)
 
 ;;;;;;;;;;;
 ;; SPECS
@@ -149,6 +157,103 @@
                       " "
                       "_")))
 
+
+
+
+(defn quote-str [s]
+  "Returns `s`, in excaped quotation marks.
+Where
+<s> is a string, typically to be rendered in a query or RDF source.
+"
+  (value-trace
+   ::QuoteString
+   (str "\"" s "\"")
+   ))
+
+(def transit-write-handlers
+  "Atom of the form {<Class> <write-handler>, ...}
+  Where
+  <Class> is a direct reference to the class instance to be encoded
+  <write-handler> := fn [s] -> {<field> <value>, ...}
+  " 
+  (atom
+   {LangStr
+    (cognitect.transit/write-handler
+     "ont_app.sparql_endpoint.core.LangStr"
+     (fn [ls]
+       {:tag (.tag ls)
+        :s (.s ls)
+        }))
+    }))
+
+  
+(defn render-transit-json 
+  "Returns a string of transit for `value`
+  Where
+  <value> is any value that be handled by cognitict/transit
+  Note: custom datatypes will be informed by @transit-write-handlers
+  "
+  [value]
+  (let [output-stream (ByteArrayOutputStream.)
+        ]
+    (transit/write
+     (transit/writer output-stream :json {:handlers @transit-write-handlers})
+     value)
+    (String. (.toByteArray output-stream))))
+
+
+(def transit-read-handlers
+  "Atom of the form {<className> <read-handler>
+  Where
+  <className> is a fully qualified string naming a class to be encoded
+  <read-handler> := fn [from-rep] -> <instance>
+  <from-rep> := an Object s.t. (<field> from-rep), encoded in corresponding
+    write-handler in @`transit-write-handlers`.
+  "
+  (atom
+   {"ont_app.sparql_endpoint.core.LangStr"
+    (cognitect.transit/read-handler
+     (fn [from-rep]
+       (endpoint/->LangStr (:s from-rep) (:tag from-rep))))
+    }
+    ))
+
+(defn read-transit-json
+  "Returns a value parsed from transit string `s`
+  Where
+  <s> is a &quot;-escaped string encoded as transit
+  Note: custom datatypes will be informed by @transit-read-handlers
+  "
+  [^String s]
+  (transit/read
+   (transit/reader
+    (ByteArrayInputStream. (.getBytes (clojure.string/replace s "&quot;" "\"")
+                                      "UTF-8"))
+    :json
+    {:handlers @transit-read-handlers})))
+
+(defn render-literal-as-transit-json
+  "Returns 'x^^transit:json'
+  NOTE: this will be encoded on write and decoded on read by the
+    cognitect/transit library."
+  [x]
+  (selmer/render "\"{{x}}\"^^transit:json" {:x (render-transit-json x)}))
+
+(defn datatype-translator [sparql-binding]
+  "Parses value from `sparql-binding`. If it's tagged as transit:json,
+  it will read the transit, otherwise try to parse xsd values,
+  defaulting to a object with metadata."
+  (let [type-spec (voc/keyword-for (sparql-binding "datatype"))
+        ]
+    (value-trace
+     ::DatatypeTranslation
+     [:log/sparql-binding sparql-binding]
+     (if (= type-spec :transit/json)
+       (read-transit-json (sparql-binding "value"))
+       ;; else
+       (endpoint/parse-xsd-value sparql-binding)
+       ))))
+
 (defn default-binding-translators
   "Binding translators used to simplify bindings. See sparq-endpoint.core
   <endpoint-url> and <graph-uri> are used to mint unique values for bnodes.
@@ -157,15 +262,8 @@
   (merge endpoint/default-translators
          {:uri uri-translator
           :bnode (partial bnode-translator endpoint-url graph-uri)
+          :datatype datatype-translator
           }))
-
-
-(defn quote-str [s]
-  "Returns `s`, in excaped quotation marks.
-Where
-<s> is a string, typically to be rendered in a query or RDF source.
-"
-  (str "\"" s "\""))
 
 (defn render-literal-dispatch
   "Returns a key for the render-literal method to dispatch on given `literal`
@@ -203,9 +301,23 @@ Where
   (let [xsd-uri (endpoint/xsd-type-uri xsd-value)]
     (str (quote-str xsd-value) "^^" (voc/qname-for (kwi-for xsd-uri)))))
 
+
 (defmethod render-literal (type #langStr "@en")
   [lang-str]
   (str (quote-str (str lang-str)) "@" (endpoint/lang lang-str)))
+
+(defmethod render-literal (type [])
+  [v]
+  (render-literal-as-transit-json v))
+
+(defmethod render-literal (type {})
+  [m]
+  (render-literal-as-transit-json m))
+
+(defmethod render-literal (type '(nil))
+  [s]
+  (render-literal-as-transit-json s))
+
 
 (defmethod render-literal :default
   [s]

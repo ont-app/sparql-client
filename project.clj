@@ -5,10 +5,12 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [org.clojure/spec.alpha "0.2.176"]
-                 ;; 3rd party 
-                 [selmer "1.12.18"]
-                 [com.taoensso/timbre "4.10.0"]
                  [org.clojure/tools.reader "1.3.2"]
+                 ;; 3rd party
+                 [cheshire "5.10.0"]
+                 [com.cognitect/transit-clj "1.0.324"]
+                 [com.taoensso/timbre "4.10.0"]
+                 [selmer "1.12.23"]
                  ;; ont-app
                  [ont-app/graph-log "0.1.1-SNAPSHOT"]
                  [ont-app/igraph "0.1.5-SNAPSHOT"]

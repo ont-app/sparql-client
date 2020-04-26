@@ -16,6 +16,8 @@ access to a public server, and `sparql-updater` for updating a mutable graph.
   - [Querying](#h3-querying)
     - [The `prefixed` function, and namespace metadata](#h4-the-prefixed-function)
     - [Binding translation](#h4-binding-translation)
+      - [The `datatype-translator` binding translator](#h5-the-datatype-translator-binding-translator)
+      - [The `^^transit:json` datatype tag](#h5-the-transit-json-datatype-tag)
       - [The `render-literal` multimethod](#h5-the-render-literal-multimethod)
       - [Blank nodes](#h5-blank-nodes)
       - [SPARQL property paths](#h5-sparql-property-paths)
@@ -36,7 +38,7 @@ Additional documentation is available at https://cljdoc.org/d/ont-app/sparql-cli
 (defproject ...
   :dependencies 
   [...
-   [ont-app/sparql-client "0.1.0-SNAPSHOT"]
+   [ont-app/sparql-client "0.1.1-SNAPSHOT"]
    ...
    ])
 ```
@@ -49,8 +51,8 @@ Require thus:
 (ns ...
   (:require 
      ...
-    [ont-app.sparql-client.core :refer :all]
-    [ont-app.igraph.core :refer :all]
+    [ont-app.sparql-client.core :as client]
+    [ont-app.igraph.core :refer :as igraph :refer :all]
     [ont-app.vocabulary.core :as voc]
     ...
     ))
@@ -59,7 +61,7 @@ Require thus:
 Then create sparql-reader thus:
 
 ```
-(make-sparql-reader
+(client/make-sparql-reader
   :graph-uri <graph name> (optional, defaulting to DEFAULT)
   :query-url <query endpoint> 
   :binding-translator <binding translator> (optional)
@@ -67,22 +69,6 @@ Then create sparql-reader thus:
   )
 
 ```
-
-Such graphs will give you to view the contents of a read-only SPARQL
-endpoint using the `IGraph` protocol to access members of the graph.
-
-Then create sparql-updater thus:
-
-```
-(make-sparql-updater
-  :graph-uri <graph name> (optional, defaulting to DEFAULT)
-  :query-url <query endpoint> 
-  :update-url <update endpoint> 
-  :binding-translator <binding translator> (optional)
-  :authentication <authentication> (as required by the endpoint)
-  )
-```
-
 Where:
 - `graph name` is a keyword representing the URI of the appropriate
   named graph.  if unspecified, the DEFAULT graph will be assumed.
@@ -90,10 +76,28 @@ Where:
   endpoint
 - `binding-translator` is a function that takes the bindings returned
   in the standard SPARQL query response format, and returns a
-  simplified key/value map.
+  simplified key/value map. (defaults are discussed [below](#h4-binding-translation))
+- `authentication` is map with {_auth-key_ _auth-value_}, interpreted per [clj-http's authentication scheme](https://github.com/dakrone/clj-http#authentication)
+
+Such graphs will give you a means to view the contents of a read-only SPARQL
+endpoint using the `IGraph` protocol to access members of the graph.
+
+You can create a sparql-updater thus:
+
+```
+(client/make-sparql-updater
+  :graph-uri <graph name> (optional, defaulting to DEFAULT)
+  :query-url <query endpoint> 
+  :update-url <update endpoint> 
+  :binding-translator <binding translator> (optional)
+  :authentication <authentication> (as required by the endpoint)
+  )
+
+```
+This has the same parameters as the the _sparql-reader_, plus:
+
 - `update-endpoint` is a string indicating the URL of a SPARQL update
   query endpoint (sparql-updater only)
-- `authentication` is map with {_auth-key_ _auth-value_}, interpreted per [clj-http's authentication scheme](https://github.com/dakrone/clj-http#authentication)
 
 Each of these will produce a record that implements
 [ont-app/IGraph](https://github.com/ont-app/igraph).
@@ -108,6 +112,8 @@ interpreted as
 
 <a name="h2-member-access"></a>
 ## Member access (both reader and updater)
+
+Access functions are all part of the IGraph protocol.
 
 Let's say we want to reference subjects in
 [Wikidata](https://www.wikidata.org/wiki/Wikidata:Main_Page). We can
@@ -158,7 +164,11 @@ Since it implements IGraph and Ifn, we can make calls like the following, descri
  ...
  )
 ```
-This returns map with large number of wikidata properties indicated by rdfs:label links to a wide array of languages, and P-numbers which Wikidata uses to uniquely identify a wide array of relationships. See the Wikidata documentation for details.
+
+This returns map with large number of wikidata properties indicated by
+rdfs:label links to a wide array of languages, and P-numbers which
+Wikidata uses to uniquely identify a wide array of relationships. See
+the Wikidata documentation for details.
 
 Let's say we're just interested in the labels...
 
@@ -177,10 +187,10 @@ Let's say we're just interested in the labels...
   #langStr "বারাক ওবামা@bn" #langStr "Barack Obama@ay"
    ...
 }
-
-
 ```
-This returns the set of labels associated with the former president.
+
+This returns the set of language-tagged labels associated with the
+former president. (See documentation of the _sparql-endpoint_ module for discussion of the  #langStr reader macro).
 
 ```
 > (def barry-labels (client :wd/Q76 :rdfs/label)]
@@ -189,7 +199,7 @@ This returns the set of labels associated with the former president.
 (#langStr "Barack Obama@en")
 >
 > ;; Chinese ...
-> (filter #(re-find #"^zhForm" (namespace %)) barry-labels)
+> (filter #(re-find #"^zh$" (endpoint/lang %)) barry-labels)
 (#langStr "巴拉克·奧巴馬@zh")
 >
 ```
@@ -209,7 +219,7 @@ instance-of
 <a name="h3-querying"></a>
 ### Querying
 
-The native query format is of course SPARQL:
+The native query format is of course SPARQL. Let's use this as an example:
 
 ```
 (def barry-query
@@ -241,6 +251,7 @@ WHERE
   Filter (Lang(?label) = "en")
   }
 ```
+
 This works because metadata has been assigned to the metadata of namespaces associated with `wd` and `rdfs` ...
 
 ```
@@ -273,25 +284,36 @@ This works because metadata has been assigned to the metadata of namespaces asso
 
 The only annotations required to resolve prefixes appropriately are
 the `:vann/preferredNamespaceUri` and `:vann/preferredNamespacePrefix`
-annotations. See ont-app/vocabulary for more details about annotating
-namespaces.
+annotations. See
+[ont-app/vocabulary](https://github.com/ont-app/vocabulary) for more
+details about annotating namespaces.
 
 <a name="h4-binding-translation"></a>
 #### Binding translation
 
-By default, bindings in the result set are simplified as follows:
+The call to the SPARQL endpoint is handled through the
+[sparql-endpoint](https://github.com/ont-app/sparql-endpoint) library,
+which simplifies standard SPARQL bindings using a set of _simplifiers_
+keyed to each type of binding. By default, bindings in the result set
+are simplified as follows:
 
-* values tagged `xsd:type` (integers, time stamps, etc.) are parsed and interpreted
-* Custom datatypes :~ "myvalue"^^myNs:myDatatype are interpreted as refied objects _x_ s.t. `(str x) -> "myValue"`, with metadata `{:datatype :myNs/myDatatype}`
-* URIs are interned as namespaced keywords using `ont-app/vocabulary` 
-* values with language tags <lang> are encoded as `LangStr` instances,
-  e.g. `#langStr "Barack Obama@en".
+| key | description | default |
+|-----|-------------|---------|
+| :uri | Value is a URI | interned as namespaced keywords using `ont-app/vocabulary` |
+| :lang | Value is literal with language tag like @en | encoded as `LangStr` instances, e.g. `#langStr "Barack Obama@en"`. |
+| :datatype | Value is a datatype | Interpret with [datatype-translator](#h5-the-datatype-translator-binding-translator) function |
+| :bnode | Value is a blank node | Encode as described [below](#h5-blank-nodes). |
 
-See [ont-app/sparql-endpoint](https://github.com/ont-app/sparql-endpoint) for documentation on SPARQL binding simplification.
-See [ont-app/vocabulary](https://github.com/ont-app/vocabulary) for documentation on how namespaces may be annotated with metadata to inform URI translations.
+See
+[ont-app/sparql-endpoint](https://github.com/ont-app/sparql-endpoint)
+for documentation on SPARQL binding simplification.
 
+See [ont-app/vocabulary](https://github.com/ont-app/vocabulary) for
+documentation on how namespaces may be annotated with metadata to
+inform URI translations.
 
 Given the above, we can query the client thus:
+
 ```
 (query client (prefixed barry-query))
 
@@ -299,14 +321,113 @@ Given the above, we can query the client thus:
 ({:label #langStr "Barack Obama@en"})
 
 ```
+<a name="h5-the-datatype-translator-binding-translator"></a>
+##### The `datatype-translator` binding translator
+
+This is the default _:datatype_ binding translator, with the following
+behavior:
+
+- xsd types will be interpreted as the usual scalar values
+- literal objects with ^^transit:json tags will be supported as
+  described [below](#h5-the-transit-json-datatype-tag).
+- otherwise a
+  [meta-tagged-literal](https://github.com/ont-app/sparql-endpoint/tree/develop#meta-tagged-literal)
+  will be returned.
+
+See also the discussion below about the
+[#h5-the-render-literal-multimethod](h5-the-render-literal-multimethod)
+method.
+
+<a name="h5-the-transit-json-datatype-tag"></a>
+##### The `^^transit:json` datatype tag
+
+Literals may be tagged with the URI whose qname is `transit:json`
+(corresponding to
+http://rdf.naturallexicon.org/ns/cognitect.transit#json), indicating
+that the value is to be encoded/decoded via the text-based JSON
+[transit format](https://github.com/cognitect/transit-format). 
+
+
+```
+> (render-literal-as-transit-json [1 2 3])
+"\"[1,2,3]\"^^transit:json"
+> 
+``` 
+
+Values encoded in this way will automatically be decoded when reading
+the query response. When it does so, it calls _read-transit-json_:
+
+```
+> (client/read-transit-json "[1,2,3]")
+[1 2 3]
+>
+```
+
+Quotation marks are escaped with `&quot;`:
+
+```
+> (client/render-literal-as-transit-json #{1 2 3})
+"\"[&quot;~#set&quot;,[1,3,2]]\"^^transit:json"
+>
+> (client/read-transit-json 
+    (clojure.string/replace "[&quot;~#set&quot;,[1,3,2]]" #"&quot;" "\"" ))
+#{1 3 2}
+>
+```
+
+The standard clojure data structures should be handled
+automatically. Custom datatypes need to have handlers in the atoms
+`client/transit-read-handlers` and `client/transit-write-handlers`.
+
+Here's the transit-write-handler for LangStr:
+
+```
+(ns ...
+ (:import
+  ...
+  [ont_app.sparql_endpoint.core LangStr]))
+ ...
+ 
+   {...
+    LangStr
+    (cognitect.transit/write-handler
+     "ont_app.sparql_endpoint.core.LangStr"
+     (fn [ls]
+       {:tag (.tag ls)
+        :s (.s ls)
+        }))
+    ...
+    }
+```
+... and the corresponding transit-read-handler:
+
+```
+{...
+ "ont_app.sparql_endpoint.core.LangStr"
+    (cognitect.transit/read-handler
+     (fn [from-rep]
+       (endpoint/->LangStr (:s from-rep) (:tag from-rep))))
+ ...
+ }
+```
+
+These are both atoms, so you should be able to add your own handlers:
+
+```
+(swap! client/transit-write-handlers (assoc <MyClass> <my-handler>))
+```
+
+Several _render-literal_ methods (described in the next section) use
+this transit-based approach.
+
 
 <a name="h5-the-render-literal-multimethod"></a>
 ##### The `render-literal` multimethod
 
 Any graph element represented as a keyword is assumed to be a KWI, and
-all other graph elements are assumed to be literals. When generating
-queries or UPDATE directives, literals are translated using the
-`render-literal` multimethod, dispatched on the output of
+all non-keyword graph elements are assumed to be literals. When
+generating queries or UPDATE directives, literals are translated using
+the `render-literal` multimethod, dispatched on the output of
 `render-literal-dispatch`, which breaks out _#inst_'s and _xsd-type_s
 as special cases, and otherwise returns (type-of _literal_).
 
@@ -328,6 +449,29 @@ and in
 [ont-app/sparql-endpoint](https://github.com/ont-app/sparql-endpoint))
 to re-interpret them as compiled objects.
 
+And of course, the _transit_ regime described above may prove useful here.
+
+The default render-literal method for vectors is :
+
+```
+(defmethod render-literal (type [])
+  [v]
+  (render-literal-as-transit-json v))
+```
+
+As described above, the original value of the vector will be decoded
+and read in when retrieved in a query. This approach stands in
+contrast to the more canonical RDF-based approach of representing
+vectors as blank nodes whose members are marked off with `rdf:_1,
+rdf:_2, ...`. If you prefer that approach, you may wish to re-define
+the render-literal method for vectors accordingly.
+
+Contents of vectors may still be searchable with regular expressions
+against the transit representations, but most of the use cases I have
+in mind expect these vectors as the payload for searches keyed on
+metadata located elsewhere in the graph.
+
+Transit-based encoding is specified also for literal maps and seqs.
 
 <a name="h5-blank-nodes"></a>
 ##### Blank nodes
@@ -472,7 +616,6 @@ This implements the [IGraphMutable](https://github.com/ont-app/igraph/tree/devel
 {}
 
 ```
-
 
 Ordinary SPARQL updates can also be posed:
 

@@ -241,6 +241,42 @@ Where:
       )))
 
 
+(deftest write-and-read-transit-issue-12
+  (let [g (make-test-graph ::write-and-read-vector)
+        ]
+    (testing "write and read a vector"
+      (is (= (render-literal [1 2 3])
+             "\"[1,2,3]\"^^transit:json"))
+      (add! g [::A
+               ::hasVector [1 2 3]
+               ::hasInt 1
+               ::hasString "string"
+               ::hasVectorOfKws [::a]
+               ::hasMap {::a [#{\a \b \c}]}
+               ::hasInst #inst "2000"
+               ::hasVectorOfInst [#inst "2000"]
+               ::hasVectorOfLangStr [#langStr "dog@en"]
+               ])
+      
+      (is (= (the (g ::A ::hasVector))
+             [1 2 3]))
+      (is (= (the (g ::A ::hasInt))
+             1))
+      (is (= (the (g ::A ::hasString))
+             "string"))
+      (is (= (the (g ::A ::hasVectorOfKws))
+             [::a]))
+      (is (= (the (g ::A ::hasMap))
+             {::a [#{\a \b \c}]}))
+      (is (= (.toInstant (.asCalendar (the (g ::A ::hasInst))))
+             (.toInstant #inst "2000")))
+      (is (= (.toInstant (the (the (g ::A ::hasVectorOfInst)))))
+          (.toInstant #inst "2000"))
+      (is (= (the (g ::A ::hasVectorOfLangStr))
+             [#langStr "dog@en"]))
+      (drop-client g)
+      )))
+
       
 (comment
  
