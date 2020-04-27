@@ -8,6 +8,8 @@ All notable changes to this project will be documented in this file. This change
   standard scalar datatypes (long, double, #inst, ...)
 - BREAKING: non-xsd datatypes are reified as objects with .asString
   and metadata, rather than a raw string.
+- Adding a regime to handle a datatype encoded as ^^transit:json.
+- Vectors, maps, and seqs are encoded/decoded as transit:json.
 - Added a load-rdf-file method for uri, path, or string.
 - Auth arguments to the endpoint are now supported
 - Added a check-ns-metadata function, called in check-qname. This will
