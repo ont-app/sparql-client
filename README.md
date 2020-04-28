@@ -348,6 +348,29 @@ that the value is to be encoded/decoded via the text-based JSON
 [transit format](https://github.com/cognitect/transit-format). 
 
 
+Vectors, Maps and Seqs are encoded as literals bearing that tag,
+allowing them to be stored and retrieved transparently:
+
+```
+> (add! g 
+    [:eg/TransitExample
+     :eg/vector [1 2 3]
+     :eg/map {:a "eh"}
+     :eg/seq '(fn [] "hello")
+     ])
+> (unique (g :eg/TransitExample :eg/vector))
+[1 2 3]
+> (unique (g :eg/TransitExample :eg/map))
+{:a "eh"}
+> (unique (g :eg/TransitExample :eg/seq))
+(fn [] "hello")
+> 
+```
+
+Here's what's going on behind the scenes.
+
+The RDF tagging is done with _render-literal-as-transit-json_:
+
 ```
 > (render-literal-as-transit-json [1 2 3])
 "\"[1,2,3]\"^^transit:json"
@@ -375,8 +398,8 @@ Quotation marks are escaped with `&quot;`:
 >
 ```
 
-The standard clojure data structures should be handled
-automatically. Custom datatypes need to have handlers in the atoms
+The standard clojure data structures should already be handled
+by transit. Custom datatypes need to have handlers defined in the atoms
 `client/transit-read-handlers` and `client/transit-write-handlers`.
 
 Here's the transit-write-handler for LangStr:
