@@ -664,8 +664,6 @@ Where
   (let [query (selmer/render subjects-query-template
                              (query-template-map client))
         ]
-    (def q query)
-    (def x (query-endpoint client query))
     (map :s
          (query-endpoint client query))))
 
@@ -1072,8 +1070,3 @@ Where
   [g path]
   (load-rdf-file g (io/as-file path)))
 
-
-
-
-
-;;         file://" (.getAbsolutePath dummy) ">" " INTO GRAPH " (voc/qname-for (:graph-uri g)))))
