@@ -696,7 +696,13 @@ Where
     uri-spec
     ;;else not a blank node
     (try
-      (voc/qname-for (check-ns-metadata uri-spec))
+      (let [qname (voc/qname-for (check-ns-metadata uri-spec))
+            has-slash #".*\/.*"
+            ]
+        (if (re-matches has-slash qname)
+          ;; SPARQL will not parse a qname with a slash in it.
+          (str "<" (voc/iri-for uri-spec) ">")
+          qname))
       (catch java.lang.AssertionError e
         (if (= (str e)
                "java.lang.AssertionError: Assert failed: (keyword? kw)")

@@ -9,7 +9,7 @@
                  ;; 3rd party
                  [cheshire "5.10.0"]
                  [com.cognitect/transit-clj "1.0.324"]
-                 [com.taoensso/timbre "4.10.0"]
+                 [com.taoensso/timbre "4.11.0-alpha1"]
                  [selmer "1.12.23"]
                  ;; ont-app
                  [ont-app/graph-log "0.1.1-SNAPSHOT"]
@@ -18,7 +18,8 @@
                  [ont-app/vocabulary "0.1.1-SNAPSHOT"]
                  ]
   :target-path "target/%s"
-  :resource-path "test/resources"
   :plugins [[lein-codox "0.10.6"]]
   :codox {:output-path "doc"}
-  :profiles {:uberjar {}})
+  :profiles {:uberjar {}}
+  :test {:resource-paths ["test/resources"]}
+  )
