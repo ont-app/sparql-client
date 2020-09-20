@@ -165,7 +165,6 @@ Where:
             ]
         (add! g [::a ::b #inst "2000"])
         (is (= (-> (the (g ::a ::b))
-                   (.asCalendar)
                    (.toInstant))
                (.toInstant #inst "2000")))
         (drop-client g))
@@ -268,7 +267,7 @@ Where:
              [::a]))
       (is (= (the (g ::A ::hasMap))
              {::a [#{\a \b \c}]}))
-      (is (= (.toInstant (.asCalendar (the (g ::A ::hasInst))))
+      (is (= (.toInstant (the (g ::A ::hasInst)))
              (.toInstant #inst "2000")))
       (is (= (.toInstant (the (the (g ::A ::hasVectorOfInst)))))
           (.toInstant #inst "2000"))

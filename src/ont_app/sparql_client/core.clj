@@ -251,7 +251,12 @@ Where
      (if (= type-spec :transit/json)
        (read-transit-json (sparql-binding "value"))
        ;; else
-       (endpoint/parse-xsd-value sparql-binding)
+       (let [dt (endpoint/parse-xsd-value sparql-binding)]
+         (if (= (type dt) org.apache.jena.datatypes.xsd.XSDDateTime)
+           (try (read-string (str "#inst \"" (str dt) "\""))
+                (catch Throwable e
+                  (str "Unparsable timestring: " (str dt))))
+           dt))
        ))))
 
 (defn default-binding-translators
