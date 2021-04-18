@@ -1,7 +1,6 @@
 (ns ont-app.sparql-client.core
-  {:vann/preferredNamespacePrefix "sparql-client"
-   :vann/preferredNamespaceUri
-   "http://rdf.naturallexicon.org/ont-app/sparql-client/core#"
+  {
+   :voc/mapsTo 'ont-app.sparql-client.ont
    }
   (:require
    [clojure.string :as s]

@@ -23,7 +23,7 @@
                  [ont-app/graph-log "0.1.0"]
                  [ont-app/igraph "0.1.5"]
                  [ont-app/sparql-endpoint "0.1.2-SNAPSHOT"]
-                 [ont-app/vocabulary "0.1.2-SNAPSHOT"]
+                 [ont-app/vocabulary "0.1.2"]
                  ]
   :target-path "target/%s"
   :plugins [[lein-codox "0.10.6"]]
