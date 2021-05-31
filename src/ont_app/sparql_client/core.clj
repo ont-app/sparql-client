@@ -156,9 +156,6 @@
                       " "
                       "_")))
 
-
-
-
 (defn quote-str [s]
   "Returns `s`, in excaped quotation marks.
 Where
@@ -184,7 +181,6 @@ Where
         :s (.s ls)
         }))
     }))
-
   
 (defn render-transit-json 
   "Returns a string of transit for `value`

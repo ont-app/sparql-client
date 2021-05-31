@@ -20,7 +20,7 @@
                  [com.taoensso/timbre "4.11.0-alpha1"]
                  [selmer "1.12.23"]
                  ;; ont-app
-                 [ont-app/graph-log "0.1.0"]
+                 [ont-app/graph-log "0.1.2"]
                  [ont-app/igraph "0.1.5"]
                  [ont-app/sparql-endpoint "0.1.2-SNAPSHOT"]
                  [ont-app/vocabulary "0.1.2"]

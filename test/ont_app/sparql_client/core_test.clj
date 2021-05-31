@@ -18,7 +18,6 @@
 
 (def client (make-sparql-reader :query-url wikidata/sparql-endpoint))
 
-
 (def what-is-spanish-for-human? "
   SELECT ?esLabel
 WHERE
@@ -40,7 +39,7 @@ WHERE
 (def instance-of (t-comp [:wdt/P31 (transitive-closure :wdt/P279)]))
 
 (def minimal-subclass-test-membership
-  #{:wd/Q488383 :wd/Q24229398 :wd/Q5 :wd/Q215627 :wd/Q795052
+  #{ :wd/Q24229398 :wd/Q5 :wd/Q215627 :wd/Q795052
     :wd/Q3778211 :wd/Q154954 :wd/Q830077 :wd/Q35120 :wd/Q23958946
     :wd/Q18336849}) ;; subject to change depending on WD.
 
@@ -66,11 +65,12 @@ WHERE
                                what-is-spanish-for-human?)))
            [{:esLabel #langStr "ser humano@es"}]))
     ;; testing p-traversal function...
-    (is (= (set/intersection
+    (is (= (set/difference
+            minimal-subclass-test-membership
             (client :wd/Q76 instance-of)
-            minimal-subclass-test-membership)
+            )
            ;; This list may change periodically in WD ...
-           minimal-subclass-test-membership))
+           #{}))
     ;; is Barry a Human?
     (is (= (client :wd/Q76 instance-of :wd/Q5)
            :wd/Q5))
