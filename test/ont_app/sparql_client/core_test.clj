@@ -5,7 +5,7 @@
             [taoensso.timbre :as timbre]
             [ont-app.graph-log.core :as glog]
             [ont-app.sparql-client.core :as sparql :refer :all]
-            [ont-app.sparql-endpoint.core :as endpoint]
+            [ont-app.vocabulary.lstr :refer [lang]]
             [ont-app.igraph.core :refer :all]
             [ont-app.igraph.graph :as graph]
             [ont-app.vocabulary.core :as voc]
@@ -48,22 +48,26 @@ WHERE
   (testing "Test accessor functions"
     (is (= (:query-url client)
            "https://query.wikidata.org/bigdata/namespace/wdq/sparql"))
-    (is (= (filter #(re-find #"^en$" (endpoint/lang %))
+    (is (= (filter #(re-find #"^en$" (lang %))
                    (client :wd/Q76 :rdfs/label))
-           '(#langStr "Barack Obama@en")))
-    (is (= (filter #(re-find #"^zh$" (endpoint/lang %))
-                   (client :wd/Q76 :rdfs/label))
-           '(#langStr "巴拉克·奧巴馬@zh")))
+           '(#lstr "Barack Obama@en")))
+    (is (#{#lstr "奧巴馬@zh"
+           #lstr "奥巴马@zh"
+           #lstr "巴拉克·奧巴馬@zh"
+           }
+         (first (filter #(re-find #"^zh$" (lang %))
+                        (client :wd/Q76 :rdfs/label)))))
+           
     (is (= (client :wd/Q76 instance-of :wd/Q5)
            :wd/Q5))
-    #_(is (= ((:rdfs/label (client :wd/Q76)) #langStr "Barack Obama@en")
-             #langStr "Barack Obama@en"))
+    #_(is (= ((:rdfs/label (client :wd/Q76)) #lstr "Barack Obama@en")
+             #lstr "Barack Obama@en"))
     ;; ... TODO
-    (is (client :wd/Q76 :rdfs/label #langStr "Barack Obama@en"))
+    (is (client :wd/Q76 :rdfs/label #lstr "Barack Obama@en"))
 
     (is (= (vec (query client (prefixed
                                what-is-spanish-for-human?)))
-           [{:esLabel #langStr "ser humano@es"}]))
+           [{:esLabel #lstr "ser humano@es"}]))
     ;; testing p-traversal function...
     (is (= (set/difference
             minimal-subclass-test-membership
@@ -85,7 +89,7 @@ WHERE
   Filter (Lang(?label) = \"en\")
   }"))
     (is (= (query client (prefixed barry-query))
-           '({:label #langStr "Barack Obama@en"}))
+           '({:label #lstr "Barack Obama@en"}))
 
     )))
 

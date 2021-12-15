@@ -18,10 +18,11 @@
    [ont-app.igraph.graph :as graph]
    [ont-app.sparql-client.ont :as ont]
    [ont-app.vocabulary.core :as voc]
+   [ont-app.vocabulary.lstr :refer [->LangStr lang]]
    )
   (:import
    [java.io ByteArrayInputStream ByteArrayOutputStream]
-   [ont_app.sparql_endpoint.core LangStr]
+   [ont_app.vocabulary.lstr LangStr]
    )
   (:gen-class))
 
@@ -175,7 +176,7 @@ Where
   (atom
    {LangStr
     (cognitect.transit/write-handler
-     "ont_app.sparql_endpoint.core.LangStr"
+     "ont_app.vocabulary.lstr.LangStr"
      (fn [ls]
        {:tag (.tag ls)
         :s (.s ls)
@@ -209,7 +210,7 @@ Where
    {"ont_app.sparql_endpoint.core.LangStr"
     (cognitect.transit/read-handler
      (fn [from-rep]
-       (endpoint/->LangStr (:s from-rep) (:tag from-rep))))
+       (->LangStr (:s from-rep) (:tag from-rep))))
     }
     ))
 
@@ -302,9 +303,9 @@ Where
     (str (quote-str xsd-value) "^^" (voc/qname-for (kwi-for xsd-uri)))))
 
 
-(defmethod render-literal (type #langStr "@en")
+(defmethod render-literal (type #lstr "@en")
   [lang-str]
-  (str (quote-str (str lang-str)) "@" (endpoint/lang lang-str)))
+  (str (quote-str (str lang-str)) "@" (lang lang-str)))
 
 (defmethod render-literal (type [])
   [v]

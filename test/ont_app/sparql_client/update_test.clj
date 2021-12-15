@@ -241,11 +241,11 @@ Where:
 
           (add! g [[:enForm/cat
                     :rdf/type :en/EnglishForm
-                    :ontolex/writtenRep #langStr "cat@en"
+                    :ontolex/writtenRep #lstr "cat@en"
                     ::tokenCount 1
                     ]])
 
-          (is (g :enForm/cat :ontolex/writtenRep #langStr "cat@en"))
+          (is (g :enForm/cat :ontolex/writtenRep #lstr "cat@en"))
           (is (g :enForm/cat ::tokenCount 1))
           (drop-client g)
           )))))
@@ -278,7 +278,7 @@ Where:
                  ::hasMap {::a [#{\a \b \c}]}
                  ::hasInst #inst "2000"
                  ::hasVectorOfInst [#inst "2000"]
-                 ::hasVectorOfLangStr [#langStr "dog@en"]
+                 ::hasVectorOfLangStr [#lstr "dog@en"]
                  ])
 
         (is (= (the (g ::A ::hasVector))
@@ -296,7 +296,7 @@ Where:
         (is (= (.toInstant (the (the (g ::A ::hasVectorOfInst)))))
             (.toInstant #inst "2000"))
         (is (= (the (g ::A ::hasVectorOfLangStr))
-               [#langStr "dog@en"]))
+               [#lstr "dog@en"]))
         (drop-client g)
         ))))
 
