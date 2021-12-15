@@ -10,17 +10,15 @@
                  ;; clojure
                  [org.clojure/clojure "1.10.3"]
                  [org.clojure/spec.alpha "0.3.218"]
-                 [org.clojure/core.async "1.5.648"]
                  ;; 3rd party
-                 [cheshire "5.10.1"]
                  [com.cognitect/transit-clj "1.0.324"]
-                 [com.taoensso/timbre "5.1.2"]
                  [selmer "1.12.45"]
                  ;; ont-app
-                 [ont-app/graph-log "0.1.5-SNAPSHOT"]
-                 [ont-app/igraph "0.1.8-SNAPSHOT"]
+                 [ont-app/graph-log "0.1.5-SNAPSHOT"
+                  :exclusions [[org.clojure/clojurescript]
+                               ]
+                  ]
                  [ont-app/sparql-endpoint "0.1.4-SNAPSHOT"]
-                 [ont-app/vocabulary "0.1.5-SNAPSHOT"]
                  ]
   :target-path "target/%s"
   :plugins [[lein-codox "0.10.6"]]
