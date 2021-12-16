@@ -1,4 +1,4 @@
-(defproject ont-app/sparql-client "0.1.1-SNAPSHOT"
+(defproject ont-app/sparql-client "0.1.1"
   :description "Provides an IGraph-compliant view onto an arbitrary SPARQL endpoint in clojure, informed by ont-app/vocabulary."
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
@@ -14,11 +14,11 @@
                  [com.cognitect/transit-clj "1.0.324"]
                  [selmer "1.12.45"]
                  ;; ont-app
-                 [ont-app/graph-log "0.1.5-SNAPSHOT"
+                 [ont-app/graph-log "0.1.5"
                   :exclusions [[org.clojure/clojurescript]
                                ]
                   ]
-                 [ont-app/sparql-endpoint "0.1.4-SNAPSHOT"]
+                 [ont-app/sparql-endpoint "0.1.4"]
                  ]
   :target-path "target/%s"
   :plugins [[lein-codox "0.10.6"]]
