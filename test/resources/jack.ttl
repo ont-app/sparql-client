@@ -1,0 +1,33 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix owl: <http://www.w3.org/2002/07/owl#>.
+@prefix dct: <http://purl.org/dc/terms/>.
+@prefix natlex: <http://rdf.naturallexicon.org/ont#>.
+@prefix eg: <http://rdf.example.com> .
+
+
+@base <http://rdf.naturallexicon.org/ont-app/sparql-client/test>.
+
+@prefix : <#>.
+
+:Jack
+    a :Person ;
+    :built _:house .
+
+_:house a :House .
+
+[
+        a :Dog ;
+        rdfs:label "The dog that chased the cat that ate the mouse that lived in the house that Jack built." ;
+        :chased [
+            a :Cat ;
+            :ate [
+                a :Mouse ;
+                :livedIn _:house ;
+            ] ;
+        ] ;
+    ]
+.
+
+

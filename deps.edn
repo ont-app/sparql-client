@@ -6,15 +6,21 @@
          selmer/selmer {:mvn/version "1.12.55"}
          ont-app/graph-log {:mvn/version "0.2.0"}
          ont-app/sparql-endpoint {:mvn/version "0.2.0"}
+         ont-app/vocabulary {:local/root "../vocabulary"}
+         ont-app/rdf {:local/root "../rdf"}
+         ont-app/igraph {:local/root "../igraph"}
         }
  :aliases {
            ;;;;;;;;;;;;;;;;
            ;; JVM SUPPORT
            ;;;;;;;;;;;;;;;;
-           :dev {:extra-paths ["test/resources"]}
+           :dev {:extra-paths ["test" "test/resources"]
+                 :extra-deps
+                 {com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.0.3" }
+                  }}
            ;; Informs :build alias, below
            :test {
-                  :extra-paths ["test"]
+                  :extra-paths ["test" "test/resources"]
                   :extra-deps {
                                org.clojure/test.check {:mvn/version "1.1.1"}
                                io.github.cognitect-labs/test-runner {:git/tag "v0.5.1"

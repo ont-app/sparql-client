@@ -1,134 +1,63 @@
 (ns ont-app.sparql-client.update-test
-  {:vann/preferredNamespacePrefix "uptest"
-   :vann/preferredNamespaceUri
-   "http://rdf.naturallexicon.org/ont-app/sparql-client/update-test#"
+  {:voc/mapsTo 'ont-app.sparql-client.core-test
    }
   (:require [clojure.test :refer :all]
-            [clojure.string :as s]
+            [clojure.java.io :as io]
+            [clojure.set :as set]
+            [clojure.string :as str]
+            [clojure.repl :refer [apropos]]
+            [clojure.reflect :refer [reflect]]
+            [clojure.pprint :refer [pprint]]
             ;; 3rd party
             [selmer.parser :as parser :refer [render]]
             [taoensso.timbre :as timbre]
             ;; ont-app
             [ont-app.graph-log.core :as glog]
             [ont-app.graph-log.levels :as levels :refer :all]
-            [ont-app.sparql-client.core :as client :refer :all]
+            [ont-app.rdf.core :as rdf]
+            [ont-app.rdf.test-support :as rdf-test]
+            [ont-app.sparql-client.core :as core :refer []]
+            [ont-app.sparql-client.ont :as ont :refer [update-ontology!]]
+            [ont-app.sparql-client.test-update-support :refer [drop-all
+                                                               drop-client
+                                                               drop-graph
+                                                               endpoint-live?
+                                                               graph-exists?
+                                                               make-test-graph
+                                                               sparql-endpoint
+                                                               with-valid-endpoint
+                                                               ]]
             [ont-app.sparql-endpoint.core :as endpoint]
-            [ont-app.igraph.core :refer :all]
-            [ont-app.igraph.graph :as graph]
-            [ont-app.igraph.core-test :as igraph-test]
+            [ont-app.igraph.core :as igraph :refer [add
+                                                    add!
+                                                    assert-unique
+                                                    normal-form
+                                                    subtract!
+                                                    subjects
+                                                    t-comp
+                                                    unique
+                                                    ]]
+            [ont-app.igraph-vocabulary.core :as igv :refer [mint-kwi]]
+            [ont-app.igraph.graph :as native-normal :refer [make-graph]]
+            [ont-app.igraph.test-support :as ts]
             [ont-app.vocabulary.core :as voc]
+            [ont-app.vocabulary.format :as voc-format :refer [encode-uri-string
+                                                              decode-uri-string
+                                                              ]]
             [ont-app.vocabulary.wikidata]
             [ont-app.vocabulary.linguistics]
             ))
 
 (glog/log-reset!)
-(timbre/set-level! :info) ;;:debug) ;; :info)
 
-(def endpoint-ref (atom (System/getenv "SPARQL_TEST_ENDPOINT")))
-;; eg: "http://localhost:3030/ont-app/"
+(timbre/set-level! :info) ;;:debug)
 
-(def endpoint-live? (not (nil? (try (clj-http.client/head @endpoint-ref)
-                                    (catch Throwable e
-                                      nil)))))
-
-
-(defmacro with-valid-endpoint
-  "Makes `body` conditional on an endpoint that is defined and up. Issues warnings otherwise."
-  [& body]
-  `(if @endpoint-ref
-     (if endpoint-live?
-       (let []
-         ~@body)
-       ;; endpoint not live
-       (warn ::endpoint-down
-             :glog/message
-             "$SPARQL_TEST_ENDPOINT {{endpoint}} not responding. We need a live updatable endpoint to run update tests."
-             :endpoint @endpoint-ref))
-       ;; else no endpoint ref
-       (warn ::no-endpoint
-                  :glog/message
-                  "No SPARQL_TEST_ENDPOINT variable defined, e.g. http://localhost:3030/my-dataset/. We need a live update endpoint to run update tests.")))
-
-(defn ensure-final 
-  "returns `s`, possibly appending `c` 
-Where:
-<s> is a string
-<c> is a character
-"
-  [s c]
-  {:pre [(char? c)
-         (string? s)]
-   }
-  (if (= (last s) c)
-    s
-    (str s c)))
-
-(defn graph-exists? [endpoint uri]
-  (endpoint/sparql-ask endpoint
-                       (prefixed
-                        (render 
-                         "ASK WHERE {graph {{uri}} {}}"
-                         {:uri (voc/qname-for uri)}))))
-
-
-(defn make-test-graph
+(defn log-reset!
   ([]
-   (if (not @endpoint-ref)
-     (fatal ::no-endpoint
-            :glog/message "No SPARQL_TEST_ENDPOINT variable defined, e.g. http://localhost:3030/my-dataset/")
-     (make-test-graph (ensure-final @endpoint-ref \/)
-                      ::test-graph)))
-  ([uri]
-   (make-test-graph (ensure-final @endpoint-ref \/)
-                    uri))
-  ([endpoint uri]
-   (try
-     (let []
-       (when (graph-exists? endpoint uri)
-         (warn ::GraphShouldNotExist
-               :log/endpoint endpoint
-               :log/uri uri
-               :glog/message "Graph {{log/uri}} should not exist! (dropping now)")
-         (endpoint/sparql-update
-          endpoint
-          (prefixed 
-           (str "DROP GRAPH " (voc/qname-for uri)))))
-       (make-sparql-updater
-        :graph-uri uri
-        :query-url (str endpoint "query")
-        :update-url (str endpoint "update")
-        ))
-     (catch Throwable e
-       (println "Failed to make test graph with args " {:endpoint endpoint
-                                                        :uri uri
-                                                        })
-       nil))))
-
-
-(defn drop-all
-  ([] (drop-all (ensure-final @endpoint-ref \/)))
-  ([endpoint]
-   (if-let [g (make-test-graph endpoint ::dummy)]
-     (let [] (update-endpoint
-              g
-              "DROP ALL")
-          (println "Test graph not available in `drop-all`")))))
-
-(defn drop-client
-  ([g]
-   (debug ::StartingDropClient
-          :log/graph-uri (:graph-uri g)
-          :glog/message "DROPPING GRAPH WITH URI {{log/graph-uri}}"
-          )
-   (update-endpoint
-    g
-    (value-debug
-     ::DropGraphUpdate
-     [:glog/message "Update: {{glog/value}}"]
-     (prefixed 
-      (str "DROP GRAPH " (voc/qname-for (:graph-uri g))))))))
-
-
+   (log-reset! :glog/TRACE))
+  ([level]
+   (glog/log-reset!)
+   (glog/set-level! level)))
 
 (deftest test-add-subtract
   (with-valid-endpoint
@@ -138,47 +67,19 @@ Where:
                {}))
         (is (= (normal-form (add! g  [[::A ::B ::C]
                                       [::A ::B ::D]]))
-               {:uptest/A
-                {:uptest/B
-                 #{:uptest/C
-                   :uptest/D
+               {:sparql-client-test/A
+                {:sparql-client-test/B
+                 #{:sparql-client-test/C
+                   :sparql-client-test/D
                    }}}))
         (is (= (normal-form (subtract! g [::A ::B ::C]))
-               {:uptest/A
-                {:uptest/B
-                 #{:uptest/D
+               {:sparql-client-test/A
+                {:sparql-client-test/B
+                 #{:sparql-client-test/D
                    }}}))
         (is (= (normal-form (subtract! g [::A ::B]))
                {}))
         (drop-client g)))))
-
-(deftest test-readme
-  (with-valid-endpoint
-    (testing "igraph readme stuff"
-      (reset! igraph-test/eg
-              (make-test-graph @endpoint-ref ::igraph-test/graph_eg))
-      (reset! igraph-test/eg-with-types
-              (make-test-graph @endpoint-ref
-                               ::igraph-test/graph_eg-with-types))
-      (reset! igraph-test/mutable-eg
-              (make-test-graph  @endpoint-ref ::igraph-test/mutable-eg))
-
-      (add! @igraph-test/eg igraph-test/eg-data)
-      (add! @igraph-test/eg-with-types
-            (normal-form
-             (union (graph/make-graph
-                     :contents igraph-test/eg-data)
-                    (graph/make-graph
-                     :contents igraph-test/types-data))))
-      (igraph-test/readme)
-
-      (add! @igraph-test/mutable-eg igraph-test/eg-data)
-      (igraph-test/readme-mutable)
-      (drop-client @igraph-test/eg)
-      (drop-client @igraph-test/eg-with-types)
-      (drop-client @igraph-test/mutable-eg)
-      )))
-
 
 (deftest write-timestamps
   (with-valid-endpoint
@@ -186,31 +87,30 @@ Where:
       (when-let [g (make-test-graph ::timestamps-test)
                  ]
         (add! g [::a ::b #inst "2000"])
-        (is (= (-> (the (g ::a ::b))
+        (is (= (-> (unique (g ::a ::b))
                    (.toInstant))
                (.toInstant #inst "2000")))
         (drop-client g)))))
 
 (deftest write-blank-nodes-issue-8
-  #_(glog/log-reset! (add glog/ontology
-                          [:glog/LogGraph :glog/level :glog/DEBUG]))
   (with-valid-endpoint
     (testing "Write a blank node to the test graph"
       (when-let [g (make-test-graph ::write-blank-node-test)
                  ]
         (let [
-              add-statement (prefixed "INSERT en:EnglishForm en:blah _b2. _b2 a en:blah")
+              add-statement (core/prefixed "INSERT en:EnglishForm en:blah _b2. _b2 a en:blah")
               ]
-          (load-rdf-file g "test/resources/dummy.ttl")
+          (rdf/read-rdf core/standard-updater-io-context
+                        g "test/resources/dummy.ttl")
           (is (= (into
                   #{}
-                  (query-endpoint
+                  (core/query-endpoint
                    g
-                   (prefixed 
+                   (core/prefixed 
                     "SELECT ?p ?o
                 WHERE
                 { 
-                  Graph uptest:write-blank-node-test
+                  Graph sparql-client-test:write-blank-node-test
                   { 
                     en:EnglishForm rdfs:subClassOf ?restriction.
                     ?restriction ?p ?o.
@@ -222,11 +122,11 @@ Where:
 
           (add! g [[:en/EnglishForm ::assoc :_/dummy]
                    [:_/dummy :rdfs/label "dummy for EnglishForm"]])
-          (is (= (the (g :en/EnglishForm (property-path "uptest:assoc/rdfs:label")))
+          (is (= (unique (g :en/EnglishForm (core/property-path "sparql-client-test:assoc/rdfs:label")))
                  "dummy for EnglishForm"))
           (drop-client g)
           )))))
-
+ 
 (deftest write-langstr-issue-10
   (glog/log-reset! (add glog/ontology
                         [:glog/LogGraph :glog/level :glog/DEBUG]))
@@ -235,40 +135,38 @@ Where:
       (if-let [g (make-test-graph ::write-langstr-test)
                ]
         (let [
-              add-statement (prefixed "INSERT en:EnglishForm en:blah _b2. _b2 a en:blah")
+              add-statement (core/prefixed "INSERT en:EnglishForm en:blah _b2. _b2 a en:blah")
               ]
-          (load-rdf-file g "test/resources/dummy.ttl")
-
+          (rdf/read-rdf core/standard-updater-io-context g "test/resources/dummy.ttl")
           (add! g [[:enForm/cat
                     :rdf/type :en/EnglishForm
-                    :ontolex/writtenRep #lstr "cat@en"
+                    :ontolex/writtenRep #voc/lstr "cat@en"
                     ::tokenCount 1
                     ]])
 
-          (is (g :enForm/cat :ontolex/writtenRep #lstr "cat@en"))
+          (is (g :enForm/cat :ontolex/writtenRep #voc/lstr "cat@en"))
           (is (g :enForm/cat ::tokenCount 1))
           (drop-client g)
           )))))
 
-
-(deftest read-rdf-file-issue-11
+;; SUPERSEDED BY rdf/read-rdf in v. 0.2.0
+#_(deftest read-rdf-file-issue-11
   (with-valid-endpoint
     (testing "Read dummy file into graph"
       (when-let [g (make-test-graph ::read-rdf-file-test)
                  ]
-        (is (= (type (load-rdf-file g "test/resources/dummy.ttl"))
+        (is (= (type (core/load-rdf-file g "test/resources/dummy.ttl"))
                java.net.URI))
         (is (g :enForm/dog :rdf/type :en/EnglishForm))
         (drop-client g)
         ))))
-
 
 (deftest write-and-read-transit-issue-12
   (with-valid-endpoint
     (when-let [g (make-test-graph ::write-and-read-vector)
                ]
       (testing "write and read a vector"
-        (is (= (render-literal [1 2 3])
+        (is (= (rdf/render-literal [1 2 3])
                "\"[1,2,3]\"^^transit:json"))
         (add! g [::A
                  ::hasVector [1 2 3]
@@ -278,28 +176,88 @@ Where:
                  ::hasMap {::a [#{\a \b \c}]}
                  ::hasInst #inst "2000"
                  ::hasVectorOfInst [#inst "2000"]
-                 ::hasVectorOfLangStr [#lstr "dog@en"]
+                 ::hasVectorOfLangStr [#voc/lstr "dog@en"]
                  ])
 
-        (is (= (the (g ::A ::hasVector))
+        (is (= (unique (g ::A ::hasVector))
                [1 2 3]))
-        (is (= (the (g ::A ::hasInt))
+        (is (= (unique (g ::A ::hasInt))
                1))
-        (is (= (the (g ::A ::hasString))
+        (is (= (unique (g ::A ::hasString))
                "string"))
-        (is (= (the (g ::A ::hasVectorOfKws))
+        (is (= (unique (g ::A ::hasVectorOfKws))
                [::a]))
-        (is (= (the (g ::A ::hasMap))
+        (is (= (unique (g ::A ::hasMap))
                {::a [#{\a \b \c}]}))
-        (is (= (.toInstant (the (g ::A ::hasInst)))
+        (is (= (.toInstant (unique (g ::A ::hasInst)))
                (.toInstant #inst "2000")))
-        (is (= (.toInstant (the (the (g ::A ::hasVectorOfInst)))))
+        (is (= (.toInstant (unique (unique (g ::A ::hasVectorOfInst)))))
             (.toInstant #inst "2000"))
-        (is (= (the (g ::A ::hasVectorOfLangStr))
-               [#lstr "dog@en"]))
+        (is (= (unique (g ::A ::hasVectorOfLangStr))
+               [#voc/lstr "dog@en"]))
         (drop-client g)
         ))))
 
-(comment
- 
-  )
+(defn make-standard-igraph-report
+  "Creates a configured report graph to use test support logic from ont-app/igraph"
+  []
+  (let [make-and-initialize-graph (fn make-and-initialize-graph [data]
+                                    (-> (make-test-graph ::standard-igraph-test)
+                                        (add! data)))
+        ]
+    (-> 
+     (native-normal/make-graph)
+     (add [::ts/StandardIGraphImplementationReport
+           ::ts/makeGraphFn make-and-initialize-graph
+           ]))))
+
+(defn do-readme-eg-access
+  [report]
+  (value-debug
+   ::test-readme-eg-access
+   (ts/test-readme-eg-access report)))
+  
+(defn do-standard-igraph-implementation-tests
+  []
+  (-> (make-standard-igraph-report)
+      (do-readme-eg-access)
+      (ts/test-readme-eg-mutation)
+      (ts/test-readme-eg-traversal)
+      (ts/test-cardinality-1)
+      ))
+
+(deftest run-standard-implementation-tests
+  "Runs the tests in igraph test-support module (does not include set ops)"
+  (with-valid-endpoint 
+    (is (empty? (-> (do-standard-igraph-implementation-tests)
+                    (ts/query-for-failures))))))
+
+(comment ;; basic operations
+  (def g (make-test-graph ::test-graph))
+  (def standard-report (do-standard-igraph-implementation-tests))
+  (def failures (ts/query-for-failures standard-report))
+  (add-tap (fn [the-tap]
+             (if (and (:type the-tap)
+                      (:value the-tap))
+               (debug (:type the-tap)
+                      ::value (:value the-tap)))))
+
+  (add! g [::A ::B ::C])
+  
+  (rdf/ontology :formats/Turtle :formats/media_type)
+  (rdf/write-rdf core/standard-updater-io-context g (clojure.java.io/file "/tmp/blah.ttl") :formats/Turtle)
+  (render core/write-rdf-construct-query-template
+          {:graph (voc/uri-for (:graph-uri g))})
+  (descendants :dct/MediaTypeOrExtent)
+
+  (def f (rdf/load-rdf (add core/standard-updater-io-context
+                            [:sparql-client/IGraph
+                             :sparql-client/graphURI ::test-load
+                             :sparql-client/queryURL (str @sparql-endpoint "query")
+                             :sparql-client/updateURL (str @sparql-endpoint "update")
+                             ])
+                       rdf-test/bnode-test-data))
+  (def f' (rdf/read-rdf core/standard-updater-io-context g rdf-test/bnode-test-data))
+
+);; comment 
+
