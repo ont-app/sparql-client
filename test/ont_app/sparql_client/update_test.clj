@@ -19,7 +19,6 @@
             [ont-app.sparql-client.core :as core :refer []]
             [ont-app.sparql-client.ont :as ont :refer [update-ontology!]]
             [ont-app.sparql-client.test-update-support :refer [drop-all
-                                                               drop-client
                                                                drop-graph
                                                                endpoint-live?
                                                                graph-exists?
@@ -32,6 +31,7 @@
                                                     add!
                                                     assert-unique
                                                     normal-form
+                                                    query
                                                     subtract!
                                                     subjects
                                                     t-comp
@@ -79,7 +79,7 @@
                    }}}))
         (is (= (normal-form (subtract! g [::A ::B]))
                {}))
-        (drop-client g)))))
+        (core/drop-client! g)))))
 
 (deftest write-timestamps
   (with-valid-endpoint
@@ -90,7 +90,7 @@
         (is (= (-> (unique (g ::a ::b))
                    (.toInstant))
                (.toInstant #inst "2000")))
-        (drop-client g)))))
+        (core/drop-client! g)))))
 
 (deftest write-blank-nodes-issue-8
   (with-valid-endpoint
@@ -100,11 +100,11 @@
         (let [
               add-statement (core/prefixed "INSERT en:EnglishForm en:blah _b2. _b2 a en:blah")
               ]
-          (rdf/read-rdf core/standard-updater-io-context
+          (rdf/read-rdf core/standard-read-context
                         g "test/resources/dummy.ttl")
           (is (= (into
                   #{}
-                  (core/query-endpoint
+                  (query
                    g
                    (core/prefixed 
                     "SELECT ?p ?o
@@ -124,7 +124,7 @@
                    [:_/dummy :rdfs/label "dummy for EnglishForm"]])
           (is (= (unique (g :en/EnglishForm (core/property-path "sparql-client-test:assoc/rdfs:label")))
                  "dummy for EnglishForm"))
-          (drop-client g)
+          (core/drop-client! g)
           )))))
  
 (deftest write-langstr-issue-10
@@ -137,7 +137,7 @@
         (let [
               add-statement (core/prefixed "INSERT en:EnglishForm en:blah _b2. _b2 a en:blah")
               ]
-          (rdf/read-rdf core/standard-updater-io-context g "test/resources/dummy.ttl")
+          (rdf/read-rdf core/standard-read-context g "test/resources/dummy.ttl")
           (add! g [[:enForm/cat
                     :rdf/type :en/EnglishForm
                     :ontolex/writtenRep #voc/lstr "cat@en"
@@ -146,7 +146,7 @@
 
           (is (g :enForm/cat :ontolex/writtenRep #voc/lstr "cat@en"))
           (is (g :enForm/cat ::tokenCount 1))
-          (drop-client g)
+          (core/drop-client! g)
           )))))
 
 ;; SUPERSEDED BY rdf/read-rdf in v. 0.2.0
@@ -158,7 +158,7 @@
         (is (= (type (core/load-rdf-file g "test/resources/dummy.ttl"))
                java.net.URI))
         (is (g :enForm/dog :rdf/type :en/EnglishForm))
-        (drop-client g)
+        (core/drop-client! g)
         ))))
 
 (deftest write-and-read-transit-issue-12
@@ -195,7 +195,7 @@
             (.toInstant #inst "2000"))
         (is (= (unique (g ::A ::hasVectorOfLangStr))
                [#voc/lstr "dog@en"]))
-        (drop-client g)
+        (core/drop-client! g)
         ))))
 
 (defn make-standard-igraph-report
@@ -245,19 +245,19 @@
   (add! g [::A ::B ::C])
   
   (rdf/ontology :formats/Turtle :formats/media_type)
-  (rdf/write-rdf core/standard-updater-io-context g (clojure.java.io/file "/tmp/blah.ttl") :formats/Turtle)
+  (rdf/write-rdf core/standard-read-context g (clojure.java.io/file "/tmp/blah.ttl") :formats/Turtle)
   (render core/write-rdf-construct-query-template
           {:graph (voc/uri-for (:graph-uri g))})
   (descendants :dct/MediaTypeOrExtent)
 
-  (def f (rdf/load-rdf (add core/standard-updater-io-context
+  (def f (rdf/load-rdf (add core/standard-read-context
                             [:sparql-client/IGraph
                              :sparql-client/graphURI ::test-load
                              :sparql-client/queryURL (str @sparql-endpoint "query")
                              :sparql-client/updateURL (str @sparql-endpoint "update")
                              ])
                        rdf-test/bnode-test-data))
-  (def f' (rdf/read-rdf core/standard-updater-io-context g rdf-test/bnode-test-data))
+  (def f' (rdf/read-rdf core/standard-read-context g rdf-test/bnode-test-data))
 
 );; comment 
 

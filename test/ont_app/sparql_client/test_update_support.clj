@@ -148,16 +148,4 @@ Where:
    (core/prefixed 
     (str "DROP GRAPH " (voc/qname-for graph-kwi)))))
   
-(defn drop-client
-  ([g]
-   (debug ::StartingDropClient
-          :log/graph-uri (:graph-uri g)
-          :glog/message "DROPPING GRAPH WITH URI {{log/graph-uri}}"
-          )
-   (core/update-endpoint!
-    g
-    (value-debug
-     ::DropGraphUpdate
-     [:glog/message "Update: {{glog/value}}"]
-     (core/prefixed 
-      (str "DROP GRAPH " (voc/qname-for (:graph-uri g))))))))
+

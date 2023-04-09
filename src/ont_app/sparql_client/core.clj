@@ -67,7 +67,9 @@
 
 ;; (set! *warn-on-reflection* true)
 
-(def ontology @ont/ontology-atom)
+(def ontology
+  "A native-normal graph describing the supporting vocabulary for sparql-client"
+  @ont/ontology-atom)
 
 ;;;;;;;;;;;
 ;; SPECS
@@ -98,7 +100,7 @@
 
 (spec/def ::oauth-token-value string?)
 
-(defn check-auth-value [k v]
+(defn- check-auth-value [k v]
   (spec/valid?
    (case k
      :basic-auth ::basic-auth-value
@@ -107,7 +109,7 @@
      :oauth-token ::oauth-token-value)
    v))
 
-(defn check-auth [m]
+(defn- check-auth [m]
   (or (nil? m)
       (and (map? m)
            (let [[[k v]] (seq m)]
@@ -144,7 +146,8 @@
 ;; RENDERING AND READING RDF ELEMENTS
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn uri-translator
+
+(defn- uri-translator
   "Returns `qualified-keyword` for `sparql-binding`
   - Where 
   -  `qualified-keyword` is a keyword in voc-re format
@@ -156,7 +159,7 @@
   [sparql-binding]
   (kwi-for (sparql-binding "value")))
 
-(defn bnode-translator
+(defn- bnode-translator
   "Returns `bnode-keyword` for `sparql-binding`
   - Where
     - `bnode-keyword`  is a keyword guaranteed to be unique even if merged
@@ -182,7 +185,7 @@
                   (swap! b-cache assoc v sym)
                   sym))))))
 
-(defn rdf-bnode
+(defn- rdf-bnode
   "Returns RDF string for `kwi` suitable for use as an element in an
   INSERT clause. "
   [kwi]
@@ -191,18 +194,20 @@
   (str "_:b" (subs (namespace kwi) 1) "_" (name kwi))
   )
 
-(defn quote-str [s]
+(defn quote-str 
   "Returns `s`, in excaped quotation marks.
 - Where
   - `s` is a string, typically to be rendered in a query or RDF source.
 "
+  [s]
    (str "\"" s "\""))
   
 
-(defn datatype-translator [sparql-binding]
+(defn- datatype-translator 
   "Parses value from `sparql-binding`. If it's tagged as transit:json,
   it will read the transit, otherwise try to parse xsd values,
   defaulting to an object with metadata."
+  [sparql-binding]
   (let [type-spec (kwi-for (sparql-binding "datatype"))
         ]
     (value-trace
@@ -221,8 +226,9 @@
            dt))
        ))))
 
+
 (defn default-binding-translators
-  "Binding translators used to simplify bindings. See sparq-endpoint.core
+ "Binding translators used to simplify bindings. See sparq-endpoint.core
   - Wnere
   - `endpoint-url` and `graph-uri` are used to mint unique values for bnodes.
   "
@@ -340,13 +346,16 @@
 
 (derive SparqlUpdater :sparql-client/IGraph) ;; dispatch in rdf i/o methods
 
-(spec/def ::sparql-client #(#{SparqlReader SparqlUpdater} (type %)))
+#_(spec/def ::sparql-client (fn [x] (#{SparqlReader SparqlUpdater} (type x))))
+(spec/def ::sparql-client (fn [x] (isa? (type x) :sparql-client/IGraph)))
 
-(def prefixed voc/prepend-prefix-declarations)
+(def prefixed
+  "Returns `sparql-string`, prepended with appropriate PREFIX decls."
+  voc/prepend-prefix-declarations)
 
-(declare default-binding-translators)
+;; (declare default-binding-translators)
 
-(def ask-if-graph-exists-template
+(def ^:private  ask-if-graph-exists-template
   "
   ASK WHERE
   {
@@ -354,7 +363,7 @@
   }
   ")
 
-(def create-graph-template
+(def ^:private create-graph-template
   "
   CREATE GRAPH {{graph-qname|safe}}
   ")
@@ -474,8 +483,7 @@
        ;;else we're using the default graph
        client))))
 
-
-(defn query-endpoint [client query]
+(defn- query-endpoint [client query]
   "Returns [`simplified-binding` ...] for `query` posed to `client`
 - Where
   - `simpified-binding` := {`key` `value` ...},
@@ -502,8 +510,7 @@
                                 (or (:auth client) {}) ;; http-req
                                 )))))
 
-
-(defn ask-endpoint [client query]
+(defn- ask-endpoint [client query]
   "Returns boolean value of `query` posed to `client`
 - Where
   - `query` is a SPARQL ASK query
@@ -520,7 +527,6 @@
                           query
                           (or (:auth client) {}) ;; http-req
                           ))))
-
 (defn- query-template-map [client]
   "Returns {`k` `v`, ...} appropriate for `client`
 - Where
@@ -537,7 +543,7 @@
                       "")
    })                          
 
-(def normal-form-query-template
+(def ^:private normal-form-query-template
   "
   Select ?s ?p ?o
   Where
@@ -548,7 +554,7 @@
   }
   ")
 
-(defn query-for-normal-form
+(defn- query-for-normal-form
   "Returns a normal-form expression of the contents of `client`. Bnodes will rendered naively."
   [client]
   (letfn [(add-o [o binding]
@@ -568,9 +574,8 @@
           ]
       (reduce collect-binding {}
               (query-endpoint client query)))))
-    
-  
-(def count-subjects-query-template
+
+(def ^:private count-subjects-query-template
   "A SPARQL query to count the number of subjects in a client graph"
   "
   Select (Count (Distinct ?s) as ?sCount) 
@@ -596,7 +601,8 @@
         ]
     (:?sCount (unique (query-endpoint client query)))))
 
-(def subjects-query-template
+
+(def ^:private subjects-query-template
   "A query for subjects in the client graph."
   "
   Select Distinct ?s Where
@@ -607,7 +613,7 @@
   }
   ")
 
-(defn query-for-subjects 
+(defn- query-for-subjects 
   "Returns [`subject` ...] at endpoint of `client`
 - Where
   - `subject` is the uri of a subject from `client`, 
@@ -623,8 +629,7 @@
     (map :s
          (query-endpoint client query))))
 
-
-(def query-for-p-o-template
+(def ^:private query-for-p-o-template
   "
   Select ?p ?o Where
   {
@@ -634,7 +639,7 @@
   }
   ")
 
-(defn check-ns-metadata 
+(defn- check-ns-metadata 
   "Logs a warning when `kwi` is in a namespace with no metadata."
   [kwi]
   (try
@@ -654,7 +659,8 @@
              :kwi kwi)
       kwi)))
 
-(defn check-qname 
+
+(defn- check-qname 
   "Traps the keyword assertion error in voc and throws a more meaningful error about blank nodes not being supported as first-class identifiers."
   [uri-spec]
   (if (rdf/bnode-kwi? uri-spec)
@@ -679,8 +685,8 @@
                              
           ;; else it's some other message
           (throw e))))))
-        
-(defn query-for-p-o 
+
+(defn- query-for-p-o 
   "Returns {`p` #{`o`...}...} for `s` at endpoint of `client`
 - Where
   - `client` conforms to ::sparql-client
@@ -708,7 +714,7 @@
      (reduce collect-bindings {}
              (query-endpoint client query)))))
 
-(def query-for-o-template
+(def ^:private query-for-o-template
   "
   Select ?o Where
   {
@@ -718,7 +724,7 @@
   }
   ")
 
-(defn query-for-o 
+(defn- query-for-o 
   "Returns #{`o`...} for `s` and `p` at endpoint of `client`
   - Where:
   - `client` conforms to ::sparql-client
@@ -751,17 +757,16 @@
              (query-endpoint client query)))))
 
 (defn property-path
-  "Returns fn [g c a q] -` [c a' q'] equivalent to `path`
-  - A traversal function
+  "Returns a traversal function [g c a q] -` [c a' q'] equivalent to `path`
   - Where
     - `path` is a SPARQL property path, e.g. 'myns:prop1/myns:prop2'
     - `g` is an sparql update client
     - `c` is a traversal context
     - `a` is an accumulator (typically a set)
-    - `a'` has been conj'ed with the `?o` bindings `query`
-    - `q` is an input q to the traversal
+    - `a'` has been conj'ed with the `?o` bindings of `query`
+    - `q` is an input queue to the traversal
     - `q'` is the rest of `q`
-    - `query` is `query-for-o-template`, with (first `q`) as subject and `path`
+    - `query` is `query-for-o template`, with (first `q`) as subject and `path`
        as the predicate. This binds a single var `?o`.
   "
   [path]
@@ -789,7 +794,7 @@
        (rest q)
        ])))
 
-(def ask-s-p-o-template
+(def ^:private ask-s-p-o-template
   "ASK where
   {
     {{graph-name-open|safe}}
@@ -798,7 +803,7 @@
   }"
   )
 
-(defn ask-s-p-o 
+(defn- ask-s-p-o 
   "Returns true if `s` `p` `o` is a triple at endpoint of `client`
 - Where:
   - `client` conforms to ::sparql-client
@@ -855,7 +860,7 @@
    client)
   ))
 
-(def add-update-template
+(def ^:private add-update-template
   "
   INSERT
   {
@@ -867,8 +872,7 @@
   {}
   ")
 
-
-(defn as-rdf 
+(defn- as-rdf 
   "Returns a clause of rdf for `igraph-vector`, using `render-literal`
   - Where
     - `igraph-vector` := [`s` `p` `o` & maybe `p` `o`, ...]
@@ -895,7 +899,7 @@
           (str/join ";\n" (map render-p-o (partition 2 (rest igraph-vector))))
           ".")))
 
-(defn as-query-clause 
+(defn- as-query-clause 
   "Returns a clause of SPARQL with variables to fill out the rest of `partial-triple`
 - Where
   - `partial-triple` := [`s`] or [`s` `p`]
@@ -917,7 +921,7 @@
                         :p-uri (check-qname p)
                         :o-var (var-fn "o")}))))
 
-(defn add-triples-query [client triples]
+(defn- add-triples-query [client triples]
   {:pre [(spec/valid? ::igraph/vector-of-vectors triples)]
    }
   (render add-update-template
@@ -952,7 +956,8 @@
                ;; use igraph.graph as an adapter
                (ont-app.igraph.graph/make-graph :contents triples))))
 
-(def remove-update-template
+
+(def ^:private remove-update-template
   "
   DELETE
   {
@@ -968,7 +973,7 @@
   }
   ")
 
-(defn remove-triples-query [client triples]
+(defn-  remove-triples-query [client triples]
   "Returns a SPARQL UPDATE query to remove `triples` from the graph of `client`
 - where
   - `client` is a sparql client graph
@@ -1055,11 +1060,27 @@
                                    (add (native-normal/make-graph)
                                         triples))))
 
+(defn drop-client!
+  "Side-effect: the named graph associated with `client` is dropped from its endpoint"
+  ([g]
+   (debug ::StartingDropClient
+          :log/graph-uri (:graph-uri g)
+          :glog/message "DROPPING GRAPH WITH URI {{log/graph-uri}}"
+          )
+   (update-endpoint!
+    g
+    (value-debug
+     ::drop-client-result
+     [:glog/message "Update: {{glog/value}}"]
+     (prefixed 
+      (str "DROP GRAPH " (voc/qname-for (:graph-uri g))))))))
+
 ;;;;;;;;;
 ;; I/O
 ;;;;;;;;;
 
-(def standard-writer-context
+(def standard-write-context
+  "Standard 'context' argument to `rdf/write-rdf` for methods dispatched on  [`sparql-client/IGraph` * *]"
   (-> @rdf/default-context
       (add [
             [#'rdf/write-rdf
@@ -1067,9 +1088,9 @@
              ]
             ])))
 
-(def standard-updater-io-context
-  "The standard context argument to igraph/rdf i/o methods"
-  (-> standard-writer-context
+(def standard-read-context
+  "The standard context argument to `rdf/read-rdf` dispatched on [`SparqlUpdater` *] and basis for `create-load-context`"
+  (-> standard-write-context
       (add [[#'rdf/load-rdf
              :rdf-app/hasGraphDispatch SparqlUpdater
              ]
@@ -1081,22 +1102,22 @@
 (defn create-load-context
   "Returns `io-context` for `query-endpoint` `update-endpoint` `graph-uri`
   - Where
-    - `io-context` is a native-normal graph serving as the the first, 'context' argument
-       to `rdf/load-rdf`
     - `query-url` is the URL of the query endpoint of the client
     - `update-url` is the URL of the update endpoint of the client
     - `graph-uri` is a KWI for the URI of the nameed graph associated with the file to
        be loaded by `rdf/load-rdf`
+    - `io-context` is a native-normal graph serving as the the first, 'context' argument
+       to `rdf/load-rdf` dispatched on [`SparqlUpdater` *]
   "
   [query-url update-url graph-uri]
-  (add standard-updater-io-context
+  (add standard-read-context
        [:sparql-client/IGraph
         :sparql-client/graphURI graph-uri
         :sparql-client/queryURL query-url
         :sparql-client/updateURL update-url
         ]))
 
-(def write-rdf-construct-query-template "
+(def ^:private write-rdf-construct-query-template "
 CONSTRUCT {?s ?p ?o}
 WHERE
 {
@@ -1109,7 +1130,7 @@ WHERE
 
 (derive SparqlUpdater :rdf-app/IGraph) ;; bring in rdf module's default methods.
 
-(defn derivable-media-types
+(defn- derivable-media-types
   "Returns {child parent, ...} for media types
   - where
     - `child` should be declared to derive from `parent`, being subsumed by
@@ -1276,7 +1297,7 @@ WHERE
   [bkwi]
   (decode-kw-name (name bkwi)))
 
-(defn find-reciprocal
+(defn- find-reciprocal
   "Returns the kwi for the annotation of the reciprocal clause for `cause-id` in `ann`, or nil if the object of clause-id is not a kwi.
   - Where
     - `ann` is a bnode annotation graph
@@ -1288,7 +1309,7 @@ WHERE
 
 (declare render-clause)
 
-(defn render-element-dispatch
+(defn- render-element-dispatch
   "Dispatches `render-element` on the `:bnode/render-type` property for `element`"
   [ann element]
    (or (unique (ann element :bnode/render-type))
@@ -1296,7 +1317,7 @@ WHERE
          :bnode/BnodeClass
          :bnode/Simple)))
 
-(defmulti render-element
+(defmulti ^:private render-element
   "[ann element] -> SPARQL description of `element`
   - Dispatched on `rendeer-element` [ann element] -> #{:bnode/BnodeClass :bnode/Simple}
   - Where
@@ -1329,7 +1350,7 @@ WHERE
     (voc/qname-for element)
     element))
 
-(def bnode-rendered-as
+(def ^:private bnode-rendered-as
   "A traversal function rendered-locally-as|node-class?/rendered-as"
   (t-comp [:bnode/bnode-class
            :bnode/rendered-as]))
@@ -1355,12 +1376,12 @@ WHERE
      result)))
 
 
-(defn render-clause-dispatch
+(defn- render-clause-dispatch
   [ann clause-id _element _correspondent]
   (let [result (unique (ann clause-id :bnode/render-type))]
     result))
 
-(defmulti render-clause
+(defmulti ^:private render-clause
   "[ann clause-id] -> SPARQL description of `clause`
     - Where
     - `ann` is a native-normal graph describing the context of `clause` in the
@@ -1390,7 +1411,7 @@ WHERE
        " "
        (render-element ann referring)))
 
-(defn collect-rendered-as
+(defn- collect-rendered-as
   "Returns [`c` `ann`, `element-stack`'] adding (`ann` `target-element` :bnode/bnode-class `bnode-class`, with `:bnode/rendered-as` as appropriate.
   - A traversal function
   - Where
@@ -1527,7 +1548,7 @@ WHERE
                ]
               )))))))
 
-(def query-for-all-bnodes
+(def ^:private query-for-all-bnodes
   "Queries `graph-uri` for all of its bnodes
 - Where
   - `graph-uri` names the graph-uri for some sparql client.
@@ -1551,7 +1572,7 @@ Where
   "
   )
 
-(defn collect-bnode-query-binding
+(defn- collect-bnode-query-binding
   "Returns `gacc`' for `bnode-query` binding `b`
   - A reducing function
   - Where
@@ -1581,7 +1602,7 @@ Where
 
 (declare collect-bnode-triple-class-annotation)
 
-(defn derive-bnode-classes
+(defn- derive-bnode-classes
   "Returns `ann`', with a BnodeClass defined for each Bnode in the client model.
   - where
     - `ann` := (:bnodes client)  is an bnode annotation graph
@@ -1656,7 +1677,7 @@ Where
                        (derive-bnode-classes)
                        ))))
 
-(defn ignore-triple-clause?
+(defn- ignore-triple-clause?
   "Truthy when a given clause should not inform annotations for bnodes
   - Where
     - `ann` is an annotation graph which may have [:bnode/AnnotationGraph :bnode/ignore-if `ignore?`
@@ -1787,7 +1808,7 @@ Where
      (reduce integrate-binding ann bindings)
      )))
 
-(defn annotate-triple-clause
+(defn- annotate-triple-clause
   "Returns `ann`' with annotations of `clause-type` for a clause describing `property` and `object`
   - where
     - `ann` is a native-normal graph annotating some snapshot of an RDF graph
@@ -1848,7 +1869,7 @@ Where
                  ]
             )))))
 
-(defn annotate-reciprocals
+(defn- annotate-reciprocals
   "Returns `ann`', with `:bnode/reciprocoal-of` assertions added as appropriate for triple [s p o] in `ann`
   - Where
     - `ann` is a bnode annotation graph
@@ -1869,7 +1890,7 @@ Where
               [that-way :bnode/reciprocal-of this-way]])))
                                     
 
-(defn substitute-bnodes
+(defn- substitute-bnodes
   "Returns `g` with all `s` and `o` swapped out for (m `s`) and (m `o`) respectively.
   - A reduce-spo function
   - Where
@@ -1902,7 +1923,7 @@ Where
     (add g [s p o])))
 
 
-(defn collect-bnode-triple-class-annotation
+(defn- collect-bnode-triple-class-annotation
   "Returns `ann`' annotating `s` `p` `o` from `ann`'s `client-model`
   - a reduce-spo function
   - where
@@ -1941,7 +1962,7 @@ Where
                      ::o o
                      }))))
 
-(defn list-subjects
+(defn- list-subjects
   "Returns (`s`, ...)`, subjects from `client`, with bnodes possibly rendered as bnode descriptions.
   - Where
     - `client` is a sparql-client
@@ -1951,8 +1972,8 @@ Where
     is nil, bnodes will be rendered as ordinary keywords which will not round-trip.
   "
   [client]
-  (let [non-bnode-subjects (filter (complement rdf/bnode-kwi?)
-                                   (query-for-subjects client))
+  (let [raw-subjects (query-for-subjects client)
+        non-bnode-subjects (filter (complement rdf/bnode-kwi?) raw-subjects)
         ]
     (if-let [ann (:bnodes client)]
       (reduce conj
@@ -1967,9 +1988,9 @@ Where
                              (unique (ann :bnode/AnnotationGraph :bnode/client-model)))))))
               non-bnode-subjects)
       ;; else bnodes are not annotated
-      non-bnode-subjects)))
+      raw-subjects)))
 
-(defn collect-bnode-class
+(defn- collect-bnode-class
   "Returns `sacc`' with the bnode class of `o` added.
   - where
     - `ann` := (:bnodes `sparql-client`)
@@ -1984,7 +2005,7 @@ Where
           (unique (ann o :bnode/bnode-class))
           o)))
 
-(defn get-o-with-bnodes
+(defn- get-o-with-bnodes
     "Returns #{`o`...} for `s` and `p` at endpoint of `client`
   - Where:
   - `client` conforms to ::sparql-client
@@ -2016,7 +2037,7 @@ Where
     ;; else there are no bnode annotations
     (query-for-o client s p)))
 
-(defn collect-bnode-description
+(defn- collect-bnode-description
   "Returns {`p` #{`bnode-class` or `o`, ...}...} for `p` and `os`
   - Where
     - `ann` := (:bnodes `sparql-client`)
@@ -2030,7 +2051,7 @@ Where
                         #{}
                         os)))
 
-(defn integrate-bnode-and-non-bnode-descriptions
+(defn- integrate-bnode-and-non-bnode-descriptions
   "Returns `desc` modified for bnodes in `ann` for `s`
   - Where
     - `ann` := (:bnodes `sparql-client`)
@@ -2063,7 +2084,7 @@ Where
         (get-p-o s))
     ))
 
-(defn get-p-o-with-bnodes
+(defn- get-p-o-with-bnodes
     "Returns {`p` #{`o`...}...} for `s` at endpoint of `client`
 - Where
   - `client` conforms to ::sparql-client
@@ -2096,7 +2117,7 @@ Where
     ;; else there are no bnode annotations
     (query-for-p-o client s)))
 
-(defn get-normal-form-with-bnodes
+(defn- get-normal-form-with-bnodes
   "Returns normal form rendering of `client`, possibly with bnodes rendered in
     round-trippable form
   - Where
@@ -2156,15 +2177,8 @@ Where
 ^{:deprecated "0.2"
   :superseded-by "ont-app.rdf.core/read-rdf"
   }
-(defmulti load-rdf-file 
-  "DEPRECATED use `rdf/read-rdf` instead
-  Returns `file-uri` for `path`
-  Side-effect: loads contents of `file-uri> into (:graph-uri `g`)
-  Where
-  `file-uri> is a uri for `path>
-  `path> identifies a file containing RDF
-  `g> has a update-endpoint! method.
-  
+(defmulti ^:deprecated load-rdf-file 
+  "DEPRECATED. use `rdf/read-rdf` instead
 "
   (fn ld-rdf-file [g path] [(type g) (type path)])
   )
