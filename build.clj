@@ -9,7 +9,7 @@
 
 (def lib 'ont-app/sparql-endpoint)
 
-(def version "0.2.1-SNAPSHOT")
+(def version "0.2.0-SNAPSHOT")
 
 (defn validate-deps
   "Throws an `ex-info` of type `::invalid-deps`, or returns `opts` unchanged"

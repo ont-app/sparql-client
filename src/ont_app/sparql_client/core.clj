@@ -1,6 +1,7 @@
 (ns ont-app.sparql-client.core
   {
    :voc/mapsTo 'ont-app.sparql-client.ont
+   :clj-kondo/config '{:linters {:deprecated-var {:level :off}}}
    }
   (:require
    [clojure.string :as str]
@@ -9,35 +10,26 @@
    [clojure.spec.alpha :as spec]
       ;; 3rd party
    [selmer.parser :as parser :refer [render]]
-   [taoensso.timbre :as timbre]
-   [cognitect.transit :as transit]
    ;; ont-app
    [ont-app.graph-log.core :as glog]
-   [ont-app.graph-log.levels :as levels :refer [debug
-                                                fatal
-                                                info
-                                                trace
-                                                warn
-                                                value-debug
-                                                value-trace
-                                                value-warn
-                                                ]]
+   [ont-app.graph-log.levels :refer [trace value-trace
+                                     debug value-debug
+                                     info
+                                     warn
+                                     fatal
+                                     ]]
    [ont-app.sparql-endpoint.core :as endpoint]
    [ont-app.igraph.core :as igraph :refer [IGraph
                                            IGraphMutable
                                            add
                                            add-to-graph
-                                           assert-unique
                                            get-p-o
-                                           get-o
                                            match-or-traverse
-                                           maybe-traverse-link
                                            normal-form
                                            query
                                            reduce-spo
                                            remove-from-graph
                                            subjects
-                                           subtract
                                            t-comp
                                            transitive-closure
                                            traverse
@@ -50,18 +42,12 @@
    [ont-app.rdf.core :as rdf]
    [ont-app.sparql-client.ont :as ont]
    [ont-app.vocabulary.core :as voc]
-   [ont-app.vocabulary.lstr :refer [
-                                    ->LangStr
-                                    lang
-                                    ]]
    [ont-app.vocabulary.format :as fmt :refer [
                                               decode-kw-name
                                               encode-kw-name
                                               ]]
    )
   (:import
-   [java.io ByteArrayInputStream ByteArrayOutputStream]
-   [ont_app.vocabulary.lstr LangStr]
    )
   (:gen-class))
 
@@ -120,6 +106,24 @@
 
 (spec/def ::bnode-kwi rdf/bnode-kwi?)
 
+(spec/def ::iri-string? (fn [s] (or (re-matches voc/ordinary-iri-str-re s)
+                                    (re-matches voc/exceptional-iri-str-re s))))
+(spec/def ::url-string? (fn [s] (re-matches voc/ordinary-iri-str-re s)))
+
+(spec/def ::kwi? (fn [k] (and (keyword? k)
+                              (spec/valid? ::iri-string? (voc/uri-for k)))))
+
+(spec/def ::kwi-or-nil? (fn [k] (or (not k)
+                                    (spec/valid? ::kwi? k))))
+(spec/def ::load-context (fn [c]
+                            (set/subset?
+                             #{:sparql-client/graphURI
+                               :sparql-client/queryURL
+                               :sparql-client/updateURL
+                               }
+                             (into #{}
+                                   (keys (c :sparql-client/IGraph))))))
+
 ;;;;;;;;;;;;;;
 ;; VOCABULARY
 ;;;;;;;;;;;;;;
@@ -145,7 +149,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; RENDERING AND READING RDF ELEMENTS
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 
 (defn- uri-translator
   "Returns `qualified-keyword` for `sparql-binding`
@@ -221,7 +224,7 @@
        (let [dt (endpoint/parse-xsd-value sparql-binding)]
          (if (= (type dt) org.apache.jena.datatypes.xsd.XSDDateTime)
            (try (read-string (str "#inst \"" (str dt) "\""))
-                (catch Throwable e
+                (catch Throwable _e
                   (str "Unparsable timestring: " (str dt))))
            dt))
        ))))
@@ -295,7 +298,7 @@
   (get-o [this s p] (get-o-with-bnodes this s p))
   (ask [this s p o] (ask-s-p-o this s p o))
   (query [this q] (query-endpoint this q))
-  (mutability [this] ::igraph/read-only)
+  (mutability [_this] ::igraph/read-only)
   
   clojure.lang.IFn
   (invoke [g] (normal-form g))
@@ -331,7 +334,7 @@
   (get-o [this s p] (get-o-with-bnodes this s p))
   (ask [this s p o] (ask-s-p-o this s p o))
   (query [this q] (query-endpoint this q))
-  (mutability [this] ::igraph/mutable)
+  (mutability [_this] ::igraph/mutable)
 
   IGraphMutable
   (add! [this to-add] (add-to-graph this to-add))
@@ -392,7 +395,11 @@
 "
   [& {:keys
       [graph-uri query-url binding-translator auth]}]
-  {:pre [(spec/valid? ::auth auth)]
+  {:pre [(spec/valid? ::kwi-or-nil? graph-uri)
+         (spec/valid? ::url-string? query-url)
+         (spec/valid? ::auth auth)
+         ]
+   :post [(spec/valid? ::sparql-client %)]
    }
   (let [client (->SparqlReader
                 graph-uri
@@ -405,7 +412,7 @@
     (if (:graph-uri client)
       
       (let [graph-qname (voc/qname-for (:graph-uri client))]
-        (if-not (ask-endpoint client
+        (when-not (ask-endpoint client
                               (prefixed
                                (render
                                 ask-if-graph-exists-template
@@ -444,14 +451,20 @@
   [& {:keys
       [graph-uri query-url binding-translator
        update-url auth]
+      :or {binding-translator (default-binding-translators query-url graph-uri)
+           }
       :as args}]
-  {:pre [(spec/valid? ::auth auth)]
+  {:pre [(spec/valid? ::kwi-or-nil? graph-uri)
+         (spec/valid? ::url-string? query-url)
+         (spec/valid? ::url-string? update-url)
+         (spec/valid? ::auth auth)
+         ]
+   :post [(spec/valid? ::sparql-client %)]
    }
   (let [client (->SparqlUpdater
                 graph-uri
                 query-url
-                (or binding-translator
-                    (default-binding-translators query-url graph-uri))
+                binding-translator
                 update-url
                 auth
                 nil ;; bnodes only added with reset-annotation-graph
@@ -464,7 +477,7 @@
       ]
      (if (:graph-uri client)
        (let [graph-qname (voc/qname-for (:graph-uri client))]
-         (if-not (ask-endpoint client
+         (when-not (ask-endpoint client
                                (prefixed
                                 (render
                                  ask-if-graph-exists-template
@@ -483,7 +496,7 @@
        ;;else we're using the default graph
        client))))
 
-(defn- query-endpoint [client query]
+(defn- query-endpoint 
   "Returns [`simplified-binding` ...] for `query` posed to `client`
 - Where
   - `simpified-binding` := {`key` `value` ...},
@@ -491,6 +504,7 @@
   - `query` is a SPARQL SELECT query
   - `client` is a SparqlReader or SparqlUpdater
 "
+  [client query]
   (let [dbg-query (debug ::StartingQueryEndpoint
                          :log/query query
                          :log/query-url (:query-url client))
@@ -510,12 +524,13 @@
                                 (or (:auth client) {}) ;; http-req
                                 )))))
 
-(defn- ask-endpoint [client query]
+(defn- ask-endpoint
   "Returns boolean value of `query` posed to `client`
 - Where
   - `query` is a SPARQL ASK query
   - `client` conforms to ::sparql-client spec
 "
+  [client query]
   (let [starting (debug ::starting-ask-endpoint
                         :log/queryUrl (:query-url client)
                         :log/query query)
@@ -527,7 +542,7 @@
                           query
                           (or (:auth client) {}) ;; http-req
                           ))))
-(defn- query-template-map [client]
+(defn- query-template-map
   "Returns {`k` `v`, ...} appropriate for `client`
 - Where
   - `client` is a sparql-client
@@ -535,10 +550,11 @@
     named graph open/close clauses
   - `k` :~ #{:graph-name-open :graph-name-close}
 "
+  [client]
   {:graph-name-open (if-let [graph-uri (:graph-uri client)]
                       (str "GRAPH <" (voc/iri-for graph-uri) "> {")
                       "")
-   :graph-name-close (if-let [graph-uri (:graph-uri client)]
+   :graph-name-close (if-let [_graph-uri (:graph-uri client)]
                       (str "}")
                       "")
    })                          
@@ -643,17 +659,16 @@
   "Logs a warning when `kwi` is in a namespace with no metadata."
   [kwi]
   (try
-    (let []
-      (when-let  [ns' (namespace kwi)]
-        (let [n (symbol ns')
-              ]
-          (if-let [the-ns (find-ns n)]
-            (when (not (meta the-ns))
-              (warn ::NoMetaDataInNS
-                    :glog/message "The namespace for {{kwi}} is in a namespace with no associated metadata."
-                    :kwi kwi)))))
+    (when-let  [ns' (namespace kwi)]
+      (let [n (symbol ns')
+            ]
+        (when-let [the-ns (find-ns n)]
+          (when (not (meta the-ns))
+            (warn ::NoMetaDataInNS
+                  :glog/message "The namespace for {{kwi}} is in a namespace with no associated metadata."
+                  :kwi kwi))))
       kwi)
-    (catch Throwable e
+    (catch Throwable _e
       (fatal ::error-checking-ns-metadata
              :glog/message "Error while checking ns metadata of {{kwi}}"
              :kwi kwi)
@@ -845,6 +860,7 @@
   {:pre [(spec/valid? ::sparql-client client)]
    }
   (let [start-state (debug ::StartingUpdateEndpoint
+                           ::client client
                            ::update (prefixed update))
         ]
   (value-trace
@@ -973,14 +989,15 @@
   }
   ")
 
-(defn-  remove-triples-query [client triples]
+(defn- remove-triples-query
   "Returns a SPARQL UPDATE query to remove `triples` from the graph of `client`
 - where
   - `client` is a sparql client graph
   - `triples` := [`triple`, ...]
   - `triple` := [s p o]
 "
-  (assert (not (empty? triples)))
+  [client triples]
+  (assert (seq  triples))
   (debug ::starting-remove-triples-query
          ::client client
          ::triples triples)
@@ -1027,13 +1044,13 @@
                            ::ensure-triple-result
                           ;; may break out multiple triples from v count > 3
                            (if (> (count v) 3)
-                             (let []
+                             (do
                                (assert (odd? (count v)))
                                (reduce (partial collect-triple (first v))
                                        vacc
                                        (partition 2 (rest v))))
                              ;; else count not > 3
-                             (let []
+                             (do
                                (assert (<= 1 (count v) 3))
                                (conj vacc v)))))
           ]
@@ -1110,6 +1127,12 @@
        to `rdf/load-rdf` dispatched on [`SparqlUpdater` *]
   "
   [query-url update-url graph-uri]
+  {:pre [(spec/valid? ::url-string? query-url)
+         (spec/valid? ::url-string?  update-url)
+         (spec/valid? ::kwi? graph-uri)
+         ]
+   :post [(spec/valid? ::load-context %)]
+   }
   (add standard-read-context
        [:sparql-client/IGraph
         :sparql-client/graphURI graph-uri
@@ -1128,7 +1151,8 @@ WHERE
 }
   ")
 
-(derive SparqlUpdater :rdf-app/IGraph) ;; bring in rdf module's default methods.
+#_(derive SparqlUpdater :rdf-app/IGraph) ;; bring in rdf module's default methods.
+(derive :sparql-client/IGraph :rdf-app/IGraph) ;; bring in rdf module's default methods.
 
 (defn- derivable-media-types
   "Returns {child parent, ...} for media types
@@ -1178,6 +1202,9 @@ WHERE
 
 (defmethod rdf/load-rdf [SparqlUpdater :rdf-app/LocalFile]
   [context to-load]
+  (trace ::starting-load-rdf-for-sparql-updater-local-file
+         ::context context
+         ::to-load to-load)
   (let [graph-uri (or (unique (context :sparql-client/IGraph :sparql-client/graphURI))
                       (kwi-for (str "file:" to-load)))
         query-url (unique (context :sparql-client/IGraph :sparql-client/queryURL))
@@ -1191,10 +1218,12 @@ WHERE
                      )
             ]
         (when (endpoint/sparql-ask query-url
-                                   (prefixed
+                                   (value-trace
+                                    ::load-rdf-graph-ask-query
+                                    (prefixed
                                     (render
-                                     "ASK WHERE {graph {{uri}} {}}"
-                                     {:uri (voc/qname-for graph-uri)})))
+                                     "ASK WHERE {graph {{uri|safe}} {}}"
+                                     {:uri (voc/qname-for graph-uri)}))))
           (throw (ex-info (format "Graph %s already exists" graph-uri)
                           {:type ::graph-already-exists
                            ::graph-uri graph-uri
@@ -1231,13 +1260,15 @@ WHERE
 
 (defmethod rdf/read-rdf [SparqlUpdater :rdf-app/LocalFile]
   [_context updater to-load]
-  (let []
-    (endpoint/sparql-update (:update-url updater)
-                            (render "LOAD <file:{{to-load}}> INTO GRAPH <{{graph-uri}}>"
-                                    {:to-load to-load
-                                     :graph-uri (voc/uri-for (:graph-uri updater))
-                                     }))
-    updater))
+  (trace ::starting-read-rdf
+         ::updater updater
+         ::to-load to-load)
+  (endpoint/sparql-update (:update-url updater)
+                          (render "LOAD <file:{{to-load}}> INTO GRAPH <{{graph-uri}}>"
+                                  {:to-load to-load
+                                   :graph-uri (voc/uri-for (:graph-uri updater))
+                                   }))
+  updater)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;; BNODE ROUND-TRIPPING
@@ -1264,7 +1295,7 @@ WHERE
 (declare render-element)
 
 (defmethod mint-kwi :bnode/BnodeClass
-  [_ ann element bnode-class-description]
+  [_head _ann element bnode-class-description]
   (keyword (namespace element)
            (encode-kw-name bnode-class-description))
   )
@@ -1297,16 +1328,6 @@ WHERE
   "
   [bkwi]
   (decode-kw-name (name bkwi)))
-
-(defn- find-reciprocal
-  "Returns the kwi for the annotation of the reciprocal clause for `cause-id` in `ann`, or nil if the object of clause-id is not a kwi.
-  - Where
-    - `ann` is a bnode annotation graph
-    - `clause-id` is a KWI naming a bnode description clause
-    - `reciprocal` is a clause 'pointing back the other way' as `clause-id`
-  "
-  [ann clause-id]
-  (unique (ann clause-id :bnode/reciprocal-of)))
 
 (declare render-clause)
 
@@ -1392,7 +1413,7 @@ WHERE
   render-clause-dispatch)
 
 (defmethod render-clause :default
-  [ann clause-class element correspondent]
+  [ann clause-class _element _correspondent]
   (throw (ex-info "Invalid render-clause-dispatch"
                   {:type ::invalid-render-clause-dispatch
                    ::ann ann
@@ -1400,13 +1421,13 @@ WHERE
                    })))
 
 (defmethod render-clause :bnode/SubordinateClause
-  [ann clause-class element object]
+  [ann clause-class _element object]
   (str (voc/qname-for (unique (ann clause-class :bnode/property)))
        " "
        (render-element ann object)))
 
 (defmethod render-clause :bnode/ContextClause
-  [ann clause-class element referring]
+  [ann clause-class _element referring]
   (str "^" ;; inverse property path operator
        (voc/qname-for (unique (ann clause-class :bnode/property)))
        " "
@@ -1649,7 +1670,7 @@ Where
   [client & {:keys [client-model bnode-query collect-bindings ignore-if]
              :or {bnode-query query-for-all-bnodes
                   collect-bindings collect-bnode-query-binding
-                  ignore-if (fn [ann clause-type node property counterpart]
+                  ignore-if (fn [_ann _clause-type _node _property counterpart]
                               (string? counterpart))
                   }}]
   {:pre [(spec/valid? ::sparql-client client)]
@@ -1833,8 +1854,7 @@ Where
       ::node node
       ::property property
       ::counterpart counterpart]
-     (let [check-ignore-fns (fn a-t-c-c-i-f [ann] false)
-           clause-class (mint-kwi :bnode/BnodeClauseClass clause-type property counterpart) 
+     (let [clause-class (mint-kwi :bnode/BnodeClauseClass clause-type property counterpart) 
 
            counterpart-annotation (case clause-type
                                     :bnode/SubordinateClause :bnode/object
@@ -1890,40 +1910,6 @@ Where
     (add ann [[this-way :bnode/reciprocal-of that-way]
               [that-way :bnode/reciprocal-of this-way]])))
                                     
-
-(defn- substitute-bnodes
-  "Returns `g` with all `s` and `o` swapped out for (m `s`) and (m `o`) respectively.
-  - A reduce-spo function
-  - Where
-    - `m` s.t. (keys `m`) :~ #{`bnode` `description`, ...}
-    - `g` is an IGraph representing the result of a query against the client
-    - `s` `p` `o` are elements retrieved from a query against the client
-    - `bnode` is a bnode retrieved from a query against the client
-    - `description` is a rount-trippable description of `bnode`
-  "
-  [m g s p o]
-  (cond
-    (and (rdf/bnode-kwi? s)
-         (rdf/bnode-kwi? o))
-
-    (-> g
-        (add [(m s) p (m o)])
-        (subtract [s p o]))
-
-    (rdf/bnode-kwi? s)
-    (-> g
-        (add [(m s) p o])
-        (subtract [s p o]))
-    
-    (rdf/bnode-kwi? o)
-    (-> g
-        (add [s p (m o)])
-        (subtract [s p o]))
-
-    :else
-    (add g [s p o])))
-
-
 (defn- collect-bnode-triple-class-annotation
   "Returns `ann`' annotating `s` `p` `o` from `ann`'s `client-model`
   - a reduce-spo function
@@ -1954,7 +1940,7 @@ Where
     (rdf/bnode-kwi? o)
     (annotate-triple-clause ann :bnode/ContextClause o p s)
 
-    :default
+    :else
     (throw (ex-info "Fell through in collect-bnode-annotation"
                     {:type ::FellThroughInCond
                      ::ann ann
@@ -2033,7 +2019,7 @@ Where
                                         (query-for-o client s p)))
                       (client-model s p))
               ]
-          (when (not (empty? result))
+          (when (seq result)
             result))))
     ;; else there are no bnode annotations
     (query-for-o client s p)))
@@ -2113,7 +2099,7 @@ Where
         (let [desc (query-for-p-o client s)
               result (integrate-bnode-and-non-bnode-descriptions ann s desc)
               ]
-          (when (not (empty? result))
+          (when (seq result)
             result))))
     ;; else there are no bnode annotations
     (query-for-p-o client s)))
@@ -2139,7 +2125,7 @@ Where
                                           s
                                           (nf s))
                                     ]
-                                (if (not (empty? desc))
+                                (if (seq desc)
                                   (add g
                                        ^{::igraph/triples-format :normal-form}
                                        {s desc})

@@ -1,5 +1,10 @@
 # Change Log
 All notable changes to this project will be documented in this file. This change log follows the conventions of [keepachangelog.com](http://keepachangelog.com/).
+# 0.2.0
+- project.clj -> deps.edn
+- Adding support for bnode round-tripping
+- Using ont-app/rdf I/O instead of v 0.1 I/O functions, which are deprecated
+- Integrating test support from IGraph and RDF modules
 
 # 0.1.1
 - BREAKING: language tagged strings are now encoded with #langStr,

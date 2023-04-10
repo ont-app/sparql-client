@@ -4,7 +4,7 @@
    "http://rdf.naturallexicon.org/ont-app/sparql-client/ont#"
    }
   (:require
-   [cognitect.transit :as transit]
+   ;;[cognitect.transit :as transit]
    [ont-app.igraph.core :as igraph
     :refer [add
             ]]

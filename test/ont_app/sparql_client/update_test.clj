@@ -12,20 +12,24 @@
             [selmer.parser :as parser :refer [render]]
             [taoensso.timbre :as timbre]
             ;; ont-app
-            [ont-app.graph-log.core :as glog]
+            [ont-app.graph-log.core :as glog :refer [entries
+                                                     show]]
             [ont-app.graph-log.levels :as levels :refer :all]
             [ont-app.rdf.core :as rdf]
             [ont-app.rdf.test-support :as rdf-test]
             [ont-app.sparql-client.core :as core :refer []]
             [ont-app.sparql-client.ont :as ont :refer [update-ontology!]]
-            [ont-app.sparql-client.test-update-support :refer [drop-all
-                                                               drop-graph
-                                                               endpoint-live?
-                                                               graph-exists?
-                                                               make-test-graph
-                                                               sparql-endpoint
-                                                               with-valid-endpoint
-                                                               ]]
+            [ont-app.sparql-client.core-test] ;; for vann mapping
+            [ont-app.sparql-client.test-update-support :as tus :refer [drop-all
+                                                                       drop-graph
+                                                                       endpoint-live?
+                                                                       ensure-fresh-graph
+                                                                       graph-exists?
+                                                                       make-test-graph
+                                                                       sparql-endpoint
+                                                                       test-graph-load-context
+                                                                       with-valid-endpoint
+                                                                       ]]
             [ont-app.sparql-endpoint.core :as endpoint]
             [ont-app.igraph.core :as igraph :refer [add
                                                     add!
@@ -39,7 +43,7 @@
                                                     ]]
             [ont-app.igraph-vocabulary.core :as igv :refer [mint-kwi]]
             [ont-app.igraph.graph :as native-normal :refer [make-graph]]
-            [ont-app.igraph.test-support :as ts]
+            [ont-app.igraph.test-support :as test-support]
             [ont-app.vocabulary.core :as voc]
             [ont-app.vocabulary.format :as voc-format :refer [encode-uri-string
                                                               decode-uri-string
@@ -58,6 +62,13 @@
   ([level]
    (glog/log-reset!)
    (glog/set-level! level)))
+
+(comment
+  (reset! sparql-endpoint "http://localhost:3030/sparql-client-test/")
+  )
+
+;; kill me
+;;(reset! sparql-endpoint "http://localhost:3030/sparql-client-test/")
 
 (deftest test-add-subtract
   (with-valid-endpoint
@@ -198,44 +209,142 @@
         (core/drop-client! g)
         ))))
 
-(defn make-standard-igraph-report
-  "Creates a configured report graph to use test support logic from ont-app/igraph"
-  []
-  (let [make-and-initialize-graph (fn make-and-initialize-graph [data]
-                                    (-> (make-test-graph ::standard-igraph-test)
-                                        (add! data)))
-        ]
-    (-> 
-     (native-normal/make-graph)
-     (add [::ts/StandardIGraphImplementationReport
-           ::ts/makeGraphFn make-and-initialize-graph
-           ]))))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Test support from the IGraph module
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn do-readme-eg-access
-  [report]
-  (value-debug
-   ::test-readme-eg-access
-   (ts/test-readme-eg-access report)))
-  
-(defn do-standard-igraph-implementation-tests
+(def readme-test-report
+  "Holds the contents of the readme-examples report to examine in case of failure"
+  (atom nil))
+
+(defn init-standard-report
   []
-  (-> (make-standard-igraph-report)
-      (do-readme-eg-access)
-      (ts/test-readme-eg-mutation)
-      (ts/test-readme-eg-traversal)
-      (ts/test-cardinality-1)
+  (-> (make-graph)
+      (igraph/add [::test-support/StandardIGraphImplementationReport
+                   ::test-support/makeGraphFn (fn [data]
+                                                (with-valid-endpoint
+                                                  (-> (make-test-graph)
+                                                      (add! data))))
+                   ])))
+
+(defn run-implementation-tests
+  "One-liner to test a fully-featured implemenation of all IGraph protcols except IGraphSet."
+  [report]
+  (assert (= (test-support/test-readme-eg-mutation-dispatch report)
+             ::igraph/mutable))
+  (-> report
+      (test-support/test-readme-eg-access)
+      (test-support/test-readme-eg-mutation)
+      (test-support/test-readme-eg-traversal)
+      (test-support/test-cardinality-1)
       ))
 
-(deftest run-standard-implementation-tests
-  "Runs the tests in igraph test-support module (does not include set ops)"
-  (with-valid-endpoint 
-    (is (empty? (-> (do-standard-igraph-implementation-tests)
-                    (ts/query-for-failures))))))
+(defn prepare-standard-igraph-report
+  []
+  (-> (init-standard-report)
+      (run-implementation-tests)))
+
+(defn do-standard-implementation-tests
+  []
+  (let [report (prepare-standard-igraph-report)
+        ]
+    ;; `report` with be a graph of test results, some of which might be of type Failed...
+    (reset! readme-test-report report)
+    report))
+  
+(deftest standard-implementation-tests
+  "Standard tests against examples in the IGraph README for immutable set-enabled graphs"
+  (with-valid-endpoint
+    (let [report (do-standard-implementation-tests)
+          ]
+      (is (empty? (test-support/query-for-failures report))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Test support from the RDF module
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(def rdf-test-report (atom nil))
+
+(defn init-rdf-report
+  "Creates a report graph for implementations tests for RDF test suppport module."
+  []
+  (let [call-write-method (fn call-write-method [g ttl-file]
+                            (rdf/write-rdf
+                             core/standard-write-context
+                             g
+                             ttl-file
+                             :formats/Turtle))
+        load-test-file (fn [url]
+                         (let [graph-kwi (voc/keyword-for
+                                          (voc/uri-str-for url))
+                                                           
+                               ]
+                         (with-valid-endpoint
+                           (ensure-fresh-graph @sparql-endpoint graph-kwi)
+                           (rdf/load-rdf
+                            (test-graph-load-context graph-kwi)
+                            url))))
+                          
+        read-test-file (fn [client file-url]
+                         (with-valid-endpoint
+                           (ensure-fresh-graph @sparql-endpoint (:graph-uri client))
+                           (rdf/read-rdf core/standard-read-context client file-url)))
+                   
+        graph-uri ::rdf-test-report-graph
+        ]
+  (-> (make-graph)
+      (add [:rdf-app/RDFImplementationReport
+            :rdf-app/makeGraphFn make-test-graph
+            :rdf-app/loadFileFn load-test-file
+            :rdf-app/readFileFn read-test-file
+            :rdf-app/writeFileFn call-write-method
+            ]))))
+
+(defn do-rdf-implementation-tests
+  "Runs the appropriate test support functions, creating a report graph."
+  []
+  (reset! rdf-test-report (init-rdf-report))
+  (-> rdf-test-report
+      ;; (rdf-test/test-bnode-support) Requires native bnode suppport (like Jena)
+      (rdf-test/test-load-of-web-resource)
+      (rdf-test/test-read-rdf-methods)
+      (rdf-test/test-write-rdf-methods)
+      (rdf-test/test-transit-support)
+      ))
+
+(deftest rdf-implementation-tests
+  "Prepares a report from the RDF test support module and checks for errors."
+  (with-valid-endpoint
+    (let [report (do-rdf-implementation-tests)]
+      (is (empty? (test-support/query-for-failures @report))))))
+
+(defn instrument-rdf-implemenation-tests
+  "Pokes around in the logs."
+  []
+  (let [bindings (glog/query-log
+                  [[:?e :rdf/type :?type]
+                   [:?e :glog/executionOrder :?order]
+                   ]
+                  )
+        entries (map :?e (sort-by :?order
+                                  bindings))
+        entry (show (last entries))
+        ]
+    entry))
+
+
+(defn doit
+  []
+  (reset! sparql-endpoint "http://localhost:3030/sparql-client-test/")
+  (log-reset!)
+  ;; (do-standard-implementation-tests)
+  (do-rdf-implementation-tests)
+  )
 
 (comment ;; basic operations
   (def g (make-test-graph ::test-graph))
   (def standard-report (do-standard-igraph-implementation-tests))
-  (def failures (ts/query-for-failures standard-report))
+  (def failures (test-support/query-for-failures standard-report))
   (add-tap (fn [the-tap]
              (if (and (:type the-tap)
                       (:value the-tap))
@@ -260,4 +369,5 @@
   (def f' (rdf/read-rdf core/standard-read-context g rdf-test/bnode-test-data))
 
 );; comment 
+
 

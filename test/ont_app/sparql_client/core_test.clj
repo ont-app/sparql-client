@@ -42,6 +42,7 @@
                                                                graph-exists?
                                                                ;; make-test-graph
                                                                sparql-endpoint
+                                                               test-graph-load-context
                                                                with-valid-endpoint
                                                                ]]
             [ont-app.sparql-endpoint.core :as endpoint]
@@ -55,9 +56,10 @@
             [ont-app.vocabulary.wikidata :as wikidata]
             ))
 
-
+;; standard logging level
 (timbre/set-level! :info) ;;:debug)
 
+;; graph-log
 (defn log-reset!
   ([]
    (log-reset! :glog/TRACE))
@@ -75,6 +77,7 @@
   (reset! sparql-endpoint "http://localhost:3030/sparql-client-test/")
   )
 
+;; wikidata
 (def wd-client (core/make-sparql-reader :query-url wikidata/sparql-endpoint))
 
 (def what-is-spanish-for-human? "
@@ -193,38 +196,6 @@ WHERE
 
 ;; Test data from "jack.ttl"
 
-(def test-graph-load-context
-  (partial core/create-load-context
-           (str @sparql-endpoint "query")
-           (str @sparql-endpoint "update")))
-
-(defn select-for-description-path
-  "Returns SPARQL bindings for properties of `bnode-description` in `g`
-  - where
-    - `g` is a sparql-client
-    - `bnode-description` is output of (`render-element` `ann` `bnode`)
-    - `ann` := native-normal graph describing the context of `bnode` in some `g`
-    - `bnode` is a blank node observed in `g`.
-  "
-  [g bnode-description]
-  (assert bnode-description)
-  (map endpoint/simplifier-with-kwis
-       (endpoint/sparql-select
-        (:query-url g)
-        (value-info
-         ::query
-         (rdf/prefixed
-          (render "
-SELECT *
-FROM <{{graph-uri}}>
-Where
-{
-  {{bnode-description}} ?p ?o.
-}
-"
-                  {:graph-uri (voc/uri-for (:graph-uri g))
-                   :bnode-description bnode-description
-                   }))))))
 
 (def expected-jack-subjects-decoded-names
   "The set of subjects expected to be retrieved from jack.ttl if bnodes have been annotated."
@@ -255,17 +226,6 @@ Where
           ;; ...its `node` is the bnode for the cat itself....
           cat-bnode (unique (ann type-cat-clause :bnode/node))
           ]
-      #_(is (= "[rdf:type sparql-client-test:Cat; sparql-client-test:ate [rdf:type sparql-client-test:Mouse; sparql-client-test:livedIn [rdf:type sparql-client-test:House; ^sparql-client-test:built sparql-client-test:Jack]]; ^sparql-client-test:chased [rdf:type sparql-client-test:Dog]]"
-             cat-bnode-description))
-      ;; select-test returns something like....
-      ;; [{:p :rdf/type, :o :sparql-client-test/Cat}
-      ;;  {:p :sparql-client-test/ate, :o "b0"}]
-      ;; the `b0` part may vary depending on implementation
-      #_(is (not (empty? (filter (fn [b] (and (= (:p b) :rdf/type)
-                                            (= (:o b) :sparql-client-test/Cat)))
-                               select-test))))
-      #_(is (not (empty? (filter (fn [b] (= (:p b) :sparql-client-test/ate))
-                               select-test))))
       (is (= expected-jack-subjects-decoded-names
              (into #{} (map (comp decode-kw-name name) (subjects jack')))))
 
@@ -408,3 +368,33 @@ Where
     ;; (set/difference ont-constructs ann-constructs)
     ann
     ))
+
+(comment
+  (defn select-for-description-path
+  "Returns SPARQL bindings for properties of `bnode-description` in `g`
+  - where
+    - `g` is a sparql-client
+    - `bnode-description` is output of (`render-element` `ann` `bnode`)
+    - `ann` := native-normal graph describing the context of `bnode` in some `g`
+    - `bnode` is a blank node observed in `g`.
+  "
+  [g bnode-description]
+  (assert bnode-description)
+  (map endpoint/simplifier-with-kwis
+       (endpoint/sparql-select
+        (:query-url g)
+        (value-info
+         ::query
+         (rdf/prefixed
+          (render "
+SELECT *
+FROM <{{graph-uri}}>
+Where
+{
+  {{bnode-description}} ?p ?o.
+}
+"
+                  {:graph-uri (voc/uri-for (:graph-uri g))
+                   :bnode-description bnode-description
+                   }))))))
+  )

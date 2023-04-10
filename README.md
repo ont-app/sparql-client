@@ -30,6 +30,11 @@ access to a public server, and `sparql-updater` for updating a mutable graph.
   - [standard-write-context](#standard-write-context)
   - [standard-read-context](#standard-read-context)
   - [create-load-context](#create-load-context)
+- [Miscellaneous utilities](#miscellaneous-utilities)
+  - [kwi-for](#kwi-for)
+  - [quote-str](#quote-str)
+  - [count-subjects](#count-subjects)
+- [Testing](#testing)
 - [Acknowledgements](#acknowledgements)
 
 

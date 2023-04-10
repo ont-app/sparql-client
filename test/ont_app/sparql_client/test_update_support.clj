@@ -49,17 +49,16 @@
   (atom 
    (System/getenv "ONT_APP_TEST_UPDATE_ENDPOINT")))
 
-#_(doseq [e (System/getenv)]
-  (println e))
-;; eg: "http://localhost:3030/sparql-client-test/
-;; note the slash at the end
-
 (def sparql-endpoint-auth
   (atom (System/getenv "ONT_APP_TEST_UPDATE_AUTH")))
 
 (defn endpoint-live?
   []
-  (not (nil? (try (clj-http.client/head @sparql-endpoint)
+  (not (nil? (try (if-let [req @sparql-endpoint-auth]
+                    (clj-http.client/head @sparql-endpoint
+                                          (read-string req))
+                    ;; else no auth
+                    (clj-http.client/head @sparql-endpoint))
                   (catch Throwable e
                     nil)))))
 
@@ -71,12 +70,12 @@
        (let []
          ~@body)
        ;; endpoint not live
-       (warn ::endpoint-down
+       (warn :sparql-client-test/endpoint-down
              :glog/message
              "$ONT_APP_TEST_UPDATE_ENDPOINT {{endpoint}} not responding. We need a live updatable endpoint to run update tests."
              :endpoint @sparql-endpoint))
        ;; else no endpoint ref
-       (warn ::no-endpoint
+       (warn :sparql-client-test/no-endpoint
              :glog/message
              "No ONT_APP_TEST_UPDATE_ENDPOINT variable defined, e.g. http://localhost:3030/my-dataset/. We need a live update endpoint to run update tests.")))
 
@@ -98,52 +97,65 @@ Where:
   (endpoint/sparql-ask endpoint
                        (core/prefixed
                         (render 
-                         "ASK WHERE {graph {{uri}} {}}"
+                         "ASK WHERE {graph {{uri|safe}} {}}"
                          {:uri (voc/qname-for uri)}))))
 
+(defn test-graph-load-context
+  "[graph-uri] -> load context"
+  [graph-uri]
+  (assert @sparql-endpoint)
+  (core/create-load-context
+   (str @sparql-endpoint "query")
+   (str @sparql-endpoint "update")
+   graph-uri))
 
+
+(defn ensure-fresh-graph
+  [endpoint uri]
+  (when (graph-exists? endpoint uri)
+    (warn :sparql-client-test/GraphAlreadyExists
+          :log/endpoint endpoint
+          :log/uri uri
+          :glog/message "Graph {{log/uri}} already exists. (dropping now)")
+         (endpoint/sparql-update
+          endpoint
+          (core/prefixed 
+           (str "DROP GRAPH " (voc/qname-for uri))))))
+  
 (defn make-test-graph
   ([]
    (assert @sparql-endpoint)
-   #_(if (not @sparql-endpoint)
-     (fatal ::no-endpoint
-            :glog/message "No SPARQL_TEST_ENDPOINT variable defined, e.g. http://localhost:3030/my-dataset/")
-       )
-     (make-test-graph (ensure-final @sparql-endpoint \/)
-                      ::test-graph))
+   (make-test-graph (ensure-final @sparql-endpoint \/)
+                    :sparql-client-test/test-graph))
   ([uri]
    (make-test-graph (ensure-final @sparql-endpoint \/)
                     uri))
   ([endpoint uri]
-   (try
-     (let []
-       (when (graph-exists? endpoint uri)
-         (warn ::GraphAlreadyExists
-               :log/endpoint endpoint
-               :log/uri uri
-               :glog/message "Graph {{log/uri}} already exists. (dropping now)")
-         (endpoint/sparql-update
-          endpoint
-          (core/prefixed 
-           (str "DROP GRAPH " (voc/qname-for uri)))))
-       (core/make-sparql-updater
-        :graph-uri uri
-        :query-url (str endpoint "query")
-        :update-url (str endpoint "update")
-        :authentication (if-let [req @sparql-endpoint-auth]
-                          (read req))
-                               
-        ))
-     (catch Throwable e
-       (println "Failed to make test graph with args " {:endpoint endpoint
-                                                        :uri uri
-                                                        })
-       nil))))
+   (value-trace
+    :sparql-client-test/starting-make-test-graph
+    [:sparql-client-test/endpoint endpoint
+     :sparql-client-test/uri uri]
+    (try
+      (let []
+        (ensure-fresh-graph endpoint uri)
+        (core/make-sparql-updater
+         :graph-uri uri
+         :query-url (str endpoint "query")
+         :update-url (str endpoint "update")
+         :authentication (if-let [req @sparql-endpoint-auth]
+                           (read req))
+         
+         ))
+      (catch Throwable e
+        (println "Failed to make test graph with args " {:endpoint endpoint
+                                                         :uri uri
+                                                         })
+        nil)))))
 
 (defn drop-all
   ([] (drop-all (ensure-final @sparql-endpoint \/)))
   ([endpoint]
-   (if-let [g (make-test-graph endpoint ::dummy)]
+   (if-let [g (make-test-graph endpoint :sparql-client-test/dummy)]
      (let [] (core/update-endpoint!
               g
               "DROP ALL")
@@ -156,4 +168,3 @@ Where:
    (core/prefixed 
     (str "DROP GRAPH " (voc/qname-for graph-kwi)))))
   
-

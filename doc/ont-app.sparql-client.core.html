@@ -39,7 +39,7 @@
                :datatype ...}
    This occurs in bindings of the form {`var` `binding`, ...} returned by a 
     SPARQL query.
-- See also sparql-endpoint.core.</pre></div></div><div class="public anchor" id="var-make-sparql-updater"><h3>make-sparql-updater</h3><div class="usage"><code>(make-sparql-updater &amp; {:keys [graph-uri query-url binding-translator update-url auth], :as args})</code></div><div class="doc"><pre class="plaintext">Returns an instance of SparqlUpdater.
+- See also sparql-endpoint.core.</pre></div></div><div class="public anchor" id="var-make-sparql-updater"><h3>make-sparql-updater</h3><div class="usage"><code>(make-sparql-updater &amp; {:keys [graph-uri query-url binding-translator update-url auth], :or {binding-translator (default-binding-translators query-url graph-uri)}, :as args})</code></div><div class="doc"><pre class="plaintext">Returns an instance of SparqlUpdater.
 - Where
 - `graph-uri` is the named graph within the SPARQL endpoint. nil implies DEFAULT
 - `query-url` is the query endpoint
@@ -74,7 +74,7 @@
      as the predicate. This binds a single var `?o`.
 </pre></div></div><div class="public anchor" id="var-quote-str"><h3>quote-str</h3><div class="usage"><code>(quote-str s)</code></div><div class="doc"><pre class="plaintext">Returns `s`, in excaped quotation marks.
 - Where
-  - `s` is a string, typically to be rendered in a query or RDF source.</pre></div></div><div class="public anchor" id="var-reset-annotation-graph"><h3>reset-annotation-graph</h3><div class="usage"><code>(reset-annotation-graph client &amp; {:keys [client-model bnode-query collect-bindings ignore-if], :or {bnode-query query-for-all-bnodes, collect-bindings collect-bnode-query-binding, ignore-if (fn [ann clause-type node property counterpart] (string? counterpart))}})</code></div><div class="doc"><pre class="plaintext">Returns `client`' annotated for blank nodes so that round-trippable values can be
+  - `s` is a string, typically to be rendered in a query or RDF source.</pre></div></div><div class="public anchor" id="var-reset-annotation-graph"><h3>reset-annotation-graph</h3><div class="usage"><code>(reset-annotation-graph client &amp; {:keys [client-model bnode-query collect-bindings ignore-if], :or {bnode-query query-for-all-bnodes, collect-bindings collect-bnode-query-binding, ignore-if (fn [_ann _clause-type _node _property counterpart] (string? counterpart))}})</code></div><div class="doc"><pre class="plaintext">Returns `client`' annotated for blank nodes so that round-trippable values can be
 provided. Overwrites any previous annotations.
 - Where
   - `client` is a sparql-client
