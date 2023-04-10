@@ -43,6 +43,8 @@
 
 (println (str "ONT_APP_TEST_UPDATE_ENDPOINT:" (System/getenv "ONT_APP_TEST_UPDATE_ENDPOINT")))
 
+(println (str "ONT_APP_TEST_UPDATE_AUTH:" (System/getenv "ONT_APP_TEST_UPDATE_AUTH")))
+
 (def sparql-endpoint
   (atom 
    (System/getenv "ONT_APP_TEST_UPDATE_ENDPOINT")))
@@ -51,6 +53,9 @@
   (println e))
 ;; eg: "http://localhost:3030/sparql-client-test/
 ;; note the slash at the end
+
+(def sparql-endpoint-auth
+  (atom (System/getenv "ONT_APP_TEST_UPDATE_AUTH")))
 
 (defn endpoint-live?
   []
@@ -125,6 +130,9 @@ Where:
         :graph-uri uri
         :query-url (str endpoint "query")
         :update-url (str endpoint "update")
+        :authentication (if-let [req @sparql-endpoint-auth]
+                          (read req))
+                               
         ))
      (catch Throwable e
        (println "Failed to make test graph with args " {:endpoint endpoint

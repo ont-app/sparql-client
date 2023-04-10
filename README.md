@@ -737,6 +737,20 @@ Escapes quotes.
 of subjects for a client. Which may be a good way to gauge the size of
 the graph at that endpoint.
 
+## Testing
+
+Functions which update a SPARQL endpoint will naturally need access to an endpoint into which testing data can be loaded. 
+
+For all tests to be run, the environment variable
+`ONT_APP_TEST_UPDATE_ENDPOINT` should be set, and point to a live
+SPARQL endpoint with update privileges. If that endpoint requires
+authentication, sparql-client will expect `ONT_APP_TEST_UPDATE_AUTH`
+to be specified to a string of EDN readable as an
+[`http-req`](https://github.com/ont-app/sparql-endpoint#h3-optional-argument-http-req)
+paremeter, e.g `{:basic-auth "myuserName:myPassword"}`.
+
+Failure to find live update endpoints will cause a number of tests to be skipped, but should not raise an exception.
+
 ## Acknowledgements
 
 Thanks to [Abdullah Ibrahim](https://github.com/aibrahim) for his

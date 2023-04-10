@@ -105,7 +105,7 @@
    (case k
      :basic-auth ::basic-auth-value
      :digest-auth ::digest-auth-value
-     :ntml-auth ::ntlm-auth-value
+     :ntlm-auth ::ntlm-auth-value
      :oauth-token ::oauth-token-value)
    v))
 
