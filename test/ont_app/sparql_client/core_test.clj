@@ -95,7 +95,8 @@ WHERE
   Filter (Lang(?label) = \"en\")
   }")
 
-(def instance-of (t-comp [:wdt/P31 (transitive-closure :wdt/P279)]))
+(def instance-of (core/property-path "wdt:P31/wdt:P279*"))
+  ;; (t-comp [:wdt/P31 (transitive-closure :wdt/P279)]))
 
 (def minimal-subclass-test-membership
   #{

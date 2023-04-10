@@ -136,10 +136,10 @@
    voc/keyword-for
    (fn kw-for-uri-kw [uri kw]
      (when @warn-on-no-ns-metadata-for-kwi?
-       (value-warn
+       (warn
         ::NoNamespaceMetadataFound
-        [:glog/message "No ns metadata found for {{log/uri}}"
-         :log/uri uri]))
+        :glog/message "No ns metadata found for {{log/uri}}"
+        :log/uri uri))
      (keyword kw))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -578,7 +578,7 @@
 (def ^:private count-subjects-query-template
   "A SPARQL query to count the number of subjects in a client graph"
   "
-  Select (Count (Distinct ?s) as ?sCount) 
+  Select (Count (?s) as ?sCount) 
   Where
   {
     {{graph-name-open|safe}}
@@ -599,7 +599,7 @@
   (let [query (render count-subjects-query-template
                       (query-template-map client))
         ]
-    (:?sCount (unique (query-endpoint client query)))))
+    (:sCount (unique (query-endpoint client query)))))
 
 
 (def ^:private subjects-query-template
@@ -1227,6 +1227,7 @@ WHERE
                          ::to-load to-load
                          }))
         ))))
+
 
 (defmethod rdf/read-rdf [SparqlUpdater :rdf-app/LocalFile]
   [_context updater to-load]
