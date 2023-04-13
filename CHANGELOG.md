@@ -1,5 +1,8 @@
 # Change Log
 All notable changes to this project will be documented in this file. This change log follows the conventions of [keepachangelog.com](http://keepachangelog.com/).
+# 0.2.1
+- Fixing lib name in the build script
+
 # 0.2.0
 - project.clj -> deps.edn
 - Adding support for bnode round-tripping

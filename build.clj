@@ -7,9 +7,9 @@
             [clojure.tools.deps.specs :as deps-specs]
             ))
 
-(def lib 'ont-app/sparql-endpoint)
+(def lib 'ont-app/sparql-client)
 
-(def version "0.2.0")
+(def version "0.2.1")
 
 (defn validate-deps
   "Throws an `ex-info` of type `::invalid-deps`, or returns `opts` unchanged"
