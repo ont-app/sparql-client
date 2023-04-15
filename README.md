@@ -1,10 +1,15 @@
 # <img src="http://ericdscott.com/NaturalLexiconLogo.png" alt="NaturalLexicon logo" :width=100 height=100/> ont-app/sparql-client
 
-Provides a view onto an arbitrary [SPARQL
-endpoint](https://github.com/ont-app/sparql-endpoint) using the
-[ont-app/IGraph](https://github.com/ont-app/igraph) protocol, and
-incoporating the
-[ont-app/vocabulary](https://github.com/ont-app/vocabulary) facility.
+Provides a view onto an arbitrary
+[SPARQL](https://www.wikidata.org/wiki/Q54871) endpoint using the
+[ont-app/IGraph](https://github.com/ont-app/igraph) protocol, allowing
+you to treat these endpoints as basic containers, accessible through
+an IFn protocol tailored to graph-shaped data.
+
+This library also incorporate the
+[ont-app/vocabulary](https://github.com/ont-app/vocabulary) facility,
+to make it easy to deal with URIs and other RDF constructs in Clojure
+code.
 
 This revolves around two defrecords: `sparql-reader` for read-only
 access to a public server, and `sparql-updater` for updating a mutable graph.
@@ -15,6 +20,7 @@ access to a public server, and `sparql-updater` for updating a mutable graph.
   - [make-sparql-reader](#make-sparql-reader)
   - [make-sparql-updater](#make-sparql-updater)
 - [Member access (both reader and updater)](#member-access)
+  - [Using the IGraph protocol](#using-the-igraph-protocol)
   - [Querying](#querying)
     - [The `prefixed` function, and namespace metadata](#the-prefixed-function)
     - [SPARQL binding simplifiers](#sparql-binding-simplifiers)
@@ -24,6 +30,7 @@ access to a public server, and `sparql-updater` for updating a mutable graph.
       - [Blank node round-tripping support](#round-tripping)
         - [decode-bnode-kwi-name](#decode-bnode-kwi-name)
 - [sparql-updater](#sparql-updater)
+  - [Using the IGraphMutable protocol](#using-the-igraphmutable-protocol)
   - [update-endpoint!](#update-endpoint)
   - [drop-client!](#drop-client)
 - [I/O](#i-o)
@@ -62,7 +69,7 @@ Require thus:
 ```
 
 Generally speaking, we create an instance of the client by providing
-endpoints, graph names and perhaps authoriazation specs, then use
+endpoints, graph names and perhaps authorization specs, then use
 [IGraph accessor
 functions](https://github.com/ont-app/igraph#Member_access) as we
 would with other IGraph implementations. Endpoints may differ in
@@ -79,16 +86,15 @@ interpreted as
 
 ### `make-sparql-reader`
 
-Then create a sparql-reader thus:
+Create a sparql-reader thus:
 
-```
-(client/make-sparql-reader
-  :graph-uri <graph name> (optional, defaulting to nil=DEFAULT)
+```clojure
+> (client/make-sparql-reader
   :query-url <query endpoint> 
   :authentication <authentication> (as required by the endpoint)
+  :graph-uri <graph name> (optional, defaulting to nil=DEFAULT)
   :binding-translator <binding translator> (optional)
   )
-
 ```
 Where:
 - `graph name` is a keyword representing the URI of the appropriate
@@ -99,7 +105,7 @@ Where:
 - `binding-translator` is a function that takes the bindings returned
   in the standard SPARQL query response format, and returns a
   simplified key/value map. This uses reasonable defaults for most
-  cases. See [below](#binding-translation) for a discussion of how
+  cases. See [below](#sparql-binding-simplifiers) for a discussion of how
   to override them.
 
 Such graphs will give you a means to view the contents of a read-only SPARQL
@@ -134,31 +140,32 @@ You may want to enable bnode round-tripping support as discussed
 <a name="member-access"></a>
 ## Member access (both reader and updater)
 
-Access functions are all part of the
+### Using the IGraph protocol
+Both the reader and updater allow you to access members of the graph using the
 [IGraph](https://github.com/ont-app/igraph) protocol.
 
 Let's say we want to reference data published in
 [Wikidata](https://www.wikidata.org/wiki/Wikidata:Main_Page). We can
 define the query endpoint thus...
 
-```
-(require '[ont-app.vocabulary.wikidata :as wd])
+```clojure
+> (require '[ont-app.vocabulary.wikidata :as wd])
 ;; This brings in metadata to inform `ont-app/vocabulary` of wikidata namespacess
 
-(def wikidata-endpoint wd/sparql-endpoint)
+> (def wikidata-endpoint wd/sparql-endpoint)
 ;; "https://query.wikidata.org/bigdata/namespace/wdq/sparql"
 ```
 
 and define a read-only SPARQL client to that endpoint...
 
-```
-(def wd-client (make-sparql-reader :query-url wikidata-endpoint)) 
+```clojure
+> (def wd-client (make-sparql-reader :query-url wikidata-endpoint)) 
 ```
 
 This will produce an instance of a SparqlReader
 
-```
-wd-client
+```clojure
+> wd-client
 ;; -> 
 {:graph-uri nil,
  :query-url
@@ -177,8 +184,8 @@ Since it implements IGraph and Ifn, we can make calls like the
 following, describing let's say Barack Obama, whose Q-number in
 Wikidata happens to be Q76.
 
-```
-(wd-client :wd/Q76) 
+```clojure
+>(wd-client :wd/Q76) 
 ;; -> 
 {:p/P4985 #{:wds/Q76-62b91a68-499a-47db-6786-87cdda9ff578},
  :rdfs/label
@@ -204,8 +211,8 @@ for details.
 
 Let's say we're just interested in the labels. We we add another argument....
 
-```
-(wd-client :wd/Q76 :rdfs/label)
+```clojure
+> (wd-client :wd/Q76 :rdfs/label)
 ;; ->
 #{{#voc/lstr "Barack Obama@jv" #voc/lstr "贝拉克·奥巴马@zh-my"
   #voc/lstr "Barack Obama@ga" #voc/lstr "ബറാക്ക് ഒബാമ@ml"
@@ -226,7 +233,7 @@ former president. (See documentation of the [vocabulary
 module](https://github.com/ont-app/vocabulary#h2-language-tagged-strings)
 for discussion of the #voc/lstr reader tag).
 
-```
+```clojure
 > (def barry-labels (wd-client :wd/Q76 :rdfs/label)]
 > ;; English...
 > (filter #(re-find #"^en$" (lang %)) barry-labels)
@@ -268,8 +275,8 @@ See [below](#property-path) for a discussion of the `property-path` function.
 
 The native query format is of course SPARQL. Let's use this as an example:
 
-```
-(def barry-query
+```clojure
+> (def barry-query
     "
 SELECT ?label
 WHERE
@@ -288,8 +295,8 @@ If there are proper
 namespace declarations, we can automatically assign prefixes to a
 query using the `prefixed` function:
 
-```
-(println (prefixed barry-query))
+```clojure
+> (println (prefixed barry-query))
 ;; ->
 PREFIX wd: <http://www.wikidata.org/entity/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -304,7 +311,7 @@ WHERE
 This works because metadata has been assigned to the metadata of
 namespaces associated with `wd` and `rdfs` ...
 
-```
+```clojure
 > (require '[ont-app/vocabulary :as voc])
 > (voc/prefix-to-ns)
 {
@@ -360,7 +367,7 @@ working off of `default-binding-translators`.
 This function returns a map of the default SPARQL binding translators used by `sparql-client`. You can merge with a map of overriding translators as needed:
 
 ```clojure
-> (core/default-binding-translators "http://my/endpoint/" "http://my/graph/name")
+> (default-binding-translators "http://my/endpoint/" "http://my/graph/name")
 {:uri #function[ont-app.sparql-client.core/uri-translator],
  :lang #function[ont-app.sparql-endpoint.core/literal->LangStr],
  :datatype #function[ont-app.sparql-client.core/datatype-translator],
@@ -383,9 +390,10 @@ Each blank node KWI matches the function
 `rdf/bnode-kwi?`, and spec `::bnode-kwi`.
 
 These blank nodes will be rendered when we translate the graph into
-normal form, but there are limits to its effectiveness in identifying
-the original blank node in the SPARQL endpoint, since blank nodes are
-only really valid within the scope of a single query.
+[normal form](https://github.com/ont-app/igraph#Normal_form), but
+there are limits to its effectiveness in identifying the original
+blank node in the SPARQL endpoint, since blank nodes are only really
+valid within the scope of a single query.
 
 Thus we could use the following expression to define in Clojure an OWL
 definition for `EnglishForm`, which is a language form whose
@@ -393,7 +401,7 @@ definition for `EnglishForm`, which is a language form whose
 requiring that [Restrictions must be expressed using blank
 nodes](https://www.w3.org/TR/owl-ref/#Restrictions):
 
-```
+```clojure
 > (add! lexicon
         [[:en/EnglishForm
           :rdfs/subClassOf :ontolex/Form
@@ -417,7 +425,7 @@ nodes](https://www.w3.org/TR/owl-ref/#Restrictions):
 ```
 But this makes accessor functions against blank nodes problematic:
 
-```
+```clojure
 > (lexicon :en/EnglishForm)
 #:rdfs{:subClassOf #{:ontolex/Form :_-1352721862/b0}}
 >
@@ -445,7 +453,7 @@ can be used in 'p' position in IGraph accessor functions.
 
 For example in the blank nodes example above:
 
-```
+```clojure
 > (lexicon :en/EnglishForm (property-path "rdfs:subClassOf/owl:hasValue"))
 #{:iso639/eng}
 > 
@@ -527,12 +535,12 @@ So `sparql-client` provides a way to annotate blank nodes in such a
 way that bnodes can be round-trippable.
 
 ```clojure
-> (def round-trippable-jack (core/reset-annotation-graph jack))
+> (def round-trippable-jack (reset-annotation-graph jack))
 ```
 
 Now when we look for subjects, each of the bnodes is rendered in such a way that it contains a description of the node, which in the vast majority of cases can be used to retrieve that same node in a follow-up query:
 
-```
+```clojure
 > (subjects round-trippable-jack)
 
 (:sparql-client-test/Jack
@@ -543,7 +551,8 @@ Now when we look for subjects, each of the bnodes is rendered in such a way that
 >
 ```
 
-Decoding and reformatting the name of the bnode for the "cat" would look like this:
+Decoding and reformatting the name of the bnode KWI for the "cat"
+would look like this:
 
 ```turtle
 [rdf:type sparql-client-test:Cat; 
@@ -589,14 +598,14 @@ or if you're implementing [IGraph traversal
 functions](https://github.com/ont-app/igraph#Traversal). When you get
 down to production and have sussed out all your use cases, it may make
 sense to write tailored queries, but hopefully this feature made it a
-bit easier to do so.
+bit easier to do the development.
 
 ###### `decode-bnode-kwi-name`
 
 This funciton yields the string for the bnode KWIs described above:
 
 ```clojure
-> (core/decode-bnode-kwi-name :_-615919603/%5Brdf:type%20sparql-client-test:Cat%3B%20sparql-client-test:ate%20%5Brdf:type%20sparql-client-test:Mouse%3B%20sparql-client-test:livedIn%20%5Brdf:type%20sparql-client-test:House%3B%20%5Esparql-client-test:built%20sparql-client-test:Jack%5D%5D%3B%20%5Esparql-client-test:chased%20%5Brdf:type%20sparql-client-test:Dog%5D%5D)
+> (decode-bnode-kwi-name :_-615919603/%5Brdf:type%20sparql-client-test:Cat%3B%20sparql-client-test:ate%20%5Brdf:type%20sparql-client-test:Mouse%3B%20sparql-client-test:livedIn%20%5Brdf:type%20sparql-client-test:House%3B%20%5Esparql-client-test:built%20sparql-client-test:Jack%5D%5D%3B%20%5Esparql-client-test:chased%20%5Brdf:type%20sparql-client-test:Dog%5D%5D)
 
 "[rdf:type sparql-client-test:Cat; sparql-client-test:ate [rdf:type sparql-client-test:Mouse; sparql-client-test:livedIn [rdf:type sparql-client-test:House; ^sparql-client-test:built sparql-client-test:Jack]]; ^sparql-client-test:chased [rdf:type sparql-client-test:Dog]]"
 >
@@ -611,7 +620,7 @@ When you have access to a SPARQL update endpoint, we use
 `make-sparql-updater`:
 
 ```clojure
-(def g (make-sparql-updater
+> (def g (make-sparql-updater
         :graph-uri ::test-graph
         :query-url "localhost:3030/my_dataset/query"
         :update-url "localhost:3030/my_dataset/update"))
@@ -619,12 +628,14 @@ When you have access to a SPARQL update endpoint, we use
 ```
 
 This has the same parameters as `make-sparql-reader`, plus an
-`:update-url` parameter.
+`:update-url` parameter, which should be a string pointing to a URL for which you have update privileges.
+
+## Using the IGraphMutable protocol
 
 This implements the [IGraphMutable](https://github.com/ont-app/igraph/tree/develop#IGraphMutable) protocol, with methods `add!` and `subtract!`:
 
 ```clojure
-(ns example-ns
+> (ns example-ns
   {
   :vann/preferredNamespacePrefix "eg"
   :vann/preferredNamespaceUri "http://rdf.example.org#"
@@ -632,13 +643,13 @@ This implements the [IGraphMutable](https://github.com/ont-app/igraph/tree/devel
   (require ....)
 )
 
-(def g (make-sparql-updater ...))
+> (def g (make-sparql-updater ...))
 
-(normal-form (add! g [[::A ::B ::C]]...))
+> (normal-form (add! g [[::A ::B ::C]]...))
 ;; ->
 {:eg/A {:eg/B #{:eg/C}}}
 
-(normal-form (subtract! g [[::A]]...))
+> (normal-form (subtract! g [[::A]]...))
 ;;->
 {}
 
@@ -654,7 +665,7 @@ discussed [below](#create-load-context).
 Ordinary SPARQL updates can also be posed:
 
 ```clojure
-(update-endoint! g "DROP ALL") # careful now!
+> (update-endoint! g "DROP ALL") # careful now!
 ;; ->
 "<html>\n<head>\n</head>\n<body>\n<h1>Success</h1>\n<p>\nUpdate succeeded\n</p>\n</body>\n</html>\n"
 
@@ -673,6 +684,7 @@ You can drop the named graph associated with a client with `drop-client!`.
 {}
 ```
 
+<a name="i-o"></a>
 ## I/O
 
 Reading and writing RDF should be done using methods defined in the [ont-app/rdf](https://github.com/ont-app/rdf#i-o) library. The first argument for each of these methods relies on a [context](https://github.com/ont-app/rdf#the-context-graph) argument.
@@ -699,7 +711,7 @@ update client.
 {:graph-uri ..., ...}
 ```
 
-<a name=create-load-context>
+<a name=create-load-context></a>
 ### `create-load-context`
 
 This returns a value that can be provided as the "context" argument in
@@ -721,7 +733,7 @@ namespace declaration.
 
 ```clojure
 > (reset! warn-on-no-ns-metadata-for-kwi? true)
-> (core/kwi-for "http://no-namespace/blah")
+> (kwi-for "http://no-namespace/blah")
 2023-04-09T15:52:29.996Z eric-Bonobo-Extreme WARN [ont-app.sparql-client.core:?] - No ns metadata found for http://no-namespace/blah
 :http:%2F%2Fno-namespace%2Fblah
 ```
@@ -732,13 +744,13 @@ namespace declaration.
 Escapes quotes.
 
 ```clojure
-(quote-str "blah")
+> (quote-str "blah")
 "\"blah\""
 ```
 
 ### `count-subjects`
 
-`(count-subjects <client>) submits a SPARQL query to count the number
+`(count-subjects <client>)` submits a SPARQL query to count the number
 of subjects for a client. Which may be a good way to gauge the size of
 the graph at that endpoint.
 
@@ -754,7 +766,8 @@ to be specified to a string of EDN readable as an
 [`http-req`](https://github.com/ont-app/sparql-endpoint#h3-optional-argument-http-req)
 paremeter, e.g `{:basic-auth "myuserName:myPassword"}`.
 
-Failure to find live update endpoints will cause a number of tests to be skipped, but should not raise an exception.
+Failure to find live, valid update endpoints will cause a number of
+tests to be skipped.
 
 ## Acknowledgements
 
