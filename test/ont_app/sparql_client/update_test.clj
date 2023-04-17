@@ -67,8 +67,6 @@
   (reset! sparql-endpoint "http://localhost:3030/sparql-client-test/")
   )
 
-;; kill me
-;;(reset! sparql-endpoint "http://localhost:3030/sparql-client-test/")
 
 (deftest test-add-subtract
   (with-valid-endpoint
@@ -109,7 +107,7 @@
       (when-let [g (make-test-graph ::write-blank-node-test)
                  ]
         (let [
-              add-statement (core/prefixed "INSERT en:EnglishForm en:blah _b2. _b2 a en:blah")
+              add-statement (rdf/prefixed "INSERT en:EnglishForm en:blah _b2. _b2 a en:blah")
               ]
           (rdf/read-rdf core/standard-read-context
                         g "test/resources/dummy.ttl")
@@ -117,7 +115,7 @@
                   #{}
                   (query
                    g
-                   (core/prefixed 
+                   (rdf/prefixed
                     "SELECT ?p ?o
                 WHERE
                 { 
@@ -130,9 +128,8 @@
                  #{{:p :rdf/type, :o :owl/Restriction}
                    {:p :owl/onProperty, :o :dct/language}
                    {:p :owl/hasValue, :o :iso639/eng}}))
-
-          (add! g [[:en/EnglishForm ::assoc :_/dummy]
-                   [:_/dummy :rdfs/label "dummy for EnglishForm"]])
+          (add! g [[:en/EnglishForm ::assoc :rdf-app/_:dummy]
+                   [:rdf-app/_:dummy :rdfs/label "dummy for EnglishForm"]])
           (is (= (unique (g :en/EnglishForm (core/property-path "sparql-client-test:assoc/rdfs:label")))
                  "dummy for EnglishForm"))
           (core/drop-client! g)
@@ -146,7 +143,7 @@
       (if-let [g (make-test-graph ::write-langstr-test)
                ]
         (let [
-              add-statement (core/prefixed "INSERT en:EnglishForm en:blah _b2. _b2 a en:blah")
+              add-statement (rdf/prefixed "INSERT en:EnglishForm en:blah _b2. _b2 a en:blah")
               ]
           (rdf/read-rdf core/standard-read-context g "test/resources/dummy.ttl")
           (add! g [[:enForm/cat
@@ -172,6 +169,20 @@
         (core/drop-client! g)
         ))))
 
+(defn do-update-with-transit-literal
+  "Checks for rendering of transit content that won't break the update query."
+  [tl]
+  (with-valid-endpoint
+    (when-let [g (make-test-graph ::update-with-transit-literal)]
+      (let [q (render "INSERT { owl:Thing owl:hasThing {{tl|safe}}. } where {}"
+                      {:tl tl})
+            ]
+        (rdf/prefixed q)
+
+      #_(core/update-endpoint! g q)
+      #_(core/drop-client! g)
+      ))))
+
 (deftest write-and-read-transit-issue-12
   (with-valid-endpoint
     (when-let [g (make-test-graph ::write-and-read-vector)
@@ -179,7 +190,7 @@
       (testing "write and read a vector"
         (is (= (rdf/render-literal [1 2 3])
                "\"[1,2,3]\"^^transit:json"))
-        (add! g [::A
+        (add! g  [::A
                  ::hasVector [1 2 3]
                  ::hasInt 1
                  ::hasString "string"

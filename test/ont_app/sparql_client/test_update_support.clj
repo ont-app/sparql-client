@@ -45,9 +45,24 @@
 
 (println (str "ONT_APP_TEST_UPDATE_AUTH:" (System/getenv "ONT_APP_TEST_UPDATE_AUTH")))
 
+(defn ensure-final
+  "returns `s`, possibly appending `c`
+Where:
+<s> is a string
+<c> is a character
+"
+  [s c]
+  {:pre [(char? c)
+         (string? s)]
+   }
+  (if (= (last s) c)
+    s
+    (str s c)))
+
 (def sparql-endpoint
   (atom 
-   (System/getenv "ONT_APP_TEST_UPDATE_ENDPOINT")))
+   (if-let [env-endpoint (System/getenv "ONT_APP_TEST_UPDATE_ENDPOINT")]
+     (ensure-final env-endpoint \/))))
 
 (def sparql-endpoint-auth
   (atom (System/getenv "ONT_APP_TEST_UPDATE_AUTH")))
@@ -79,23 +94,11 @@
              :glog/message
              "No ONT_APP_TEST_UPDATE_ENDPOINT variable defined, e.g. http://localhost:3030/my-dataset/. We need a live update endpoint to run update tests.")))
 
-(defn ensure-final 
-  "returns `s`, possibly appending `c` 
-Where:
-<s> is a string
-<c> is a character
-"
-  [s c]
-  {:pre [(char? c)
-         (string? s)]
-   }
-  (if (= (last s) c)
-    s
-    (str s c)))
+
 
 (defn graph-exists? [endpoint uri]
   (endpoint/sparql-ask endpoint
-                       (core/prefixed
+                       (rdf/prefixed
                         (render 
                          "ASK WHERE {graph {{uri|safe}} {}}"
                          {:uri (voc/qname-for uri)}))))
@@ -119,7 +122,7 @@ Where:
           :glog/message "Graph {{log/uri}} already exists. (dropping now)")
          (endpoint/sparql-update
           endpoint
-          (core/prefixed 
+          (rdf/prefixed
            (str "DROP GRAPH " (voc/qname-for uri))))))
   
 (defn make-test-graph
@@ -165,6 +168,6 @@ Where:
   [graph-kwi]
   (endpoint/sparql-update
    @sparql-endpoint
-   (core/prefixed 
+   (rdf/prefixed
     (str "DROP GRAPH " (voc/qname-for graph-kwi)))))
   

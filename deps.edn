@@ -2,31 +2,21 @@
  :paths ["src" "resources"]
   :deps {
          org.clojure/clojure {:mvn/version "1.11.1"}
-         selmer/selmer {:mvn/version "1.12.58"}
-         ont-app/graph-log {:mvn/version "0.2.0"
-                            :exclusions [org.clojure/data.priority-map
-                                         ;; per nvd CVE-2023-23459
-                                         ]
-
-                            }
-         ont-app/sparql-endpoint {:mvn/version "0.2.0"
+         selmer/selmer {:mvn/version "1.12.59"}
+         ont-app/sparql-endpoint {:mvn/version "0.2.1"
                                   :exclusions [org.glassfish/jakarta.json
                                                ;; per nvd CVE-2022-45688
                                                com.github.jsonld-java/jsonld-java
                                                ;; per nvd CVE-2022-45688
-                                               ]
-                                  }
-         ont-app/vocabulary {:mvn/version "0.2.2"}
-         ont-app/rdf {:mvn/version "0.2.8"}
-         ont-app/igraph {:mvn/version "0.2.2"}
-        }
+                                               ]}
+         ont-app/rdf {:mvn/version "0.3.2"}} ;; /deps
  :aliases {
            ;;;;;;;;;;;;;;;;
            ;; JVM SUPPORT
            ;;;;;;;;;;;;;;;;
            :dev {:extra-paths ["test" "test/resources"]
                  :extra-deps
-                 {com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.0.3" }
+                 {com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.0.4" }
                   }}
            ;; Informs :build alias, below
            :test {
@@ -34,22 +24,18 @@
                   :extra-deps {
                                org.clojure/test.check {:mvn/version "1.1.1"}
                                io.github.cognitect-labs/test-runner {:git/tag "v0.5.1"
-                                                                     :git/sha "dfb30dd"}
-                               }
-                  }
+                                                                     :git/sha "dfb30dd"}}}
            ;; Building utilities
            ;; invoke with -T:build
            ;; for help: clojure -A:deps -T:build help/doc
            :build {
                    :deps {
                           io.github.seancorfield/build-clj {:git/tag "v0.9.2" 
-                                                            :git/sha "9c9f078";;"d758807"
+                                                            :git/sha "9c9f078"
                                                             }
-                          org.clojure/tools.deps {:mvn/version "0.18.1335"}
+                          org.clojure/tools.deps {:mvn/version "0.18.1354"}
                           }
-                   :ns-default build
-                   }
-           } ;; aliases
+                   :ns-default build}} ;; /aliases
  }
 ;; NOTES:
 ;; NVD flags CVE-2023-0247 as HIGH for clojurescript, but closer inspection reveals that this problem originates in a GO repo, so probs false negative. See https://clojurians.slack.com/archives/C03S1L9DN/p1674467942513839 for discussion.

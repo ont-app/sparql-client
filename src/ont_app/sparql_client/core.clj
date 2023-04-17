@@ -39,7 +39,7 @@
                                            ]]
    [ont-app.igraph.graph :as native-normal :refer [make-graph]]
    [ont-app.igraph-vocabulary.core :as igv :refer [mint-kwi]]
-   [ont-app.rdf.core :as rdf]
+   [ont-app.rdf.core :as rdf :refer [prefixed]]
    [ont-app.sparql-client.ont :as ont]
    [ont-app.vocabulary.core :as voc]
    [ont-app.vocabulary.format :as fmt :refer [
@@ -134,7 +134,7 @@
   "
   (atom false))
 
-(def kwi-for
+(def ^:private kwi-for
   "Issues a warning if no ns metadata is found for the URI"
   (partial
    voc/keyword-for
@@ -155,9 +155,6 @@
   - Where 
   -  `qualified-keyword` is a keyword in voc-re format
   - `sparql-binding` := {?value ...}, typically returned from a query
-  - `query-url` is the URL of the query endpoint
-  - `graph-uri` is the URI of the graph
-  - NOTE: `query-url` and `graph-uri`are used to handle blank nodes.
   "
   [sparql-binding]
   (kwi-for (sparql-binding "value")))
@@ -178,15 +175,17 @@
   ([query-url graph-uri b-cache sparql-binding]
    {:post [(partial spec/valid? ::bnode-kwi)]
     }
-   (keyword (str "_" (hash (str query-url graph-uri)))
-            (let [v (sparql-binding "value")]
-              (if-let [sym (@b-cache v)]
-                sym
-                ;; else no lookup
-                (let [sym (name (gensym "b_"))
-                      ]
-                  (swap! b-cache assoc v sym)
-                  sym))))))
+   (keyword "rdf-app"
+            (str "_:"
+                 (hash (str query-url graph-uri))
+                 (let [v (sparql-binding "value")]
+                   (if-let [sym (@b-cache v)]
+                     sym
+                     ;; else no lookup
+                     (let [sym (name (gensym "b_"))
+                           ]
+                       (swap! b-cache assoc v sym)
+                       sym)))))))
 
 (defn- rdf-bnode
   "Returns RDF string for `kwi` suitable for use as an element in an
@@ -194,7 +193,7 @@
   [kwi]
   {:pre [(spec/valid? ::bnode-kwi kwi)]
    }
-  (str "_:b" (subs (namespace kwi) 1) "_" (name kwi))
+  (name kwi)
   )
 
 (defn quote-str 
@@ -351,12 +350,6 @@
 
 #_(spec/def ::sparql-client (fn [x] (#{SparqlReader SparqlUpdater} (type x))))
 (spec/def ::sparql-client (fn [x] (isa? (type x) :sparql-client/IGraph)))
-
-(def prefixed
-  "Returns `sparql-string`, prepended with appropriate PREFIX decls."
-  voc/prepend-prefix-declarations)
-
-;; (declare default-binding-translators)
 
 (def ^:private  ask-if-graph-exists-template
   "
@@ -532,9 +525,10 @@
 "
   [client query]
   (let [starting (debug ::starting-ask-endpoint
-                        :log/queryUrl (:query-url client)
-                        :log/query query)
-        ]
+                        :queryUrl (:query-url client)
+                        :query query
+                        :glog/message "ASK query to {{queryUrl}}:\n{{query}}"
+                        )]
     (value-debug
      ::ask-endpoint-return
      [:log/resultOf starting]
@@ -888,7 +882,7 @@
   {}
   ")
 
-(defn- as-rdf 
+(defn- as-rdf
   "Returns a clause of rdf for `igraph-vector`, using `render-literal`
   - Where
     - `igraph-vector` := [`s` `p` `o` & maybe `p` `o`, ...]
@@ -940,17 +934,20 @@
 (defn- add-triples-query [client triples]
   {:pre [(spec/valid? ::igraph/vector-of-vectors triples)]
    }
-  (render add-update-template
-                 (merge (query-template-map client)
-                        {:triples (str/join "\n"
-                                          (map as-rdf 
-                                               triples))
-                         })))
+  (value-trace
+   ::add-triples-query-result
+   [::client client ::triples triples]
+   (render add-update-template
+           (merge (query-template-map client)
+                  {:triples (str/join "\n"
+                                      (map as-rdf
+                                           triples))
+                   }))))
 
 (defmethod add-to-graph [SparqlUpdater :vector-of-vectors]
   [client triples]
 
-  (debug ::add-to-graph ::triples triples)
+  (debug ::add-to-graph ::client client ::triples triples)
   (when-not (empty? triples)
     (update-endpoint! client
                      (prefixed
@@ -1095,6 +1092,10 @@
 ;;;;;;;;;
 ;; I/O
 ;;;;;;;;;
+
+;; files from jars should be cached locally....
+(derive :rdf-app/FileResource :rdf-app/CachedResource)
+(derive :rdf-app/WebResource :rdf-app/CachedResource)
 
 (def standard-write-context
   "Standard 'context' argument to `rdf/write-rdf` for methods dispatched on  [`sparql-client/IGraph` * *]"
@@ -1339,7 +1340,7 @@ WHERE
          :bnode/BnodeClass
          :bnode/Simple)))
 
-(defmulti ^:private render-element
+(defmulti render-element
   "[ann element] -> SPARQL description of `element`
   - Dispatched on `rendeer-element` [ann element] -> #{:bnode/BnodeClass :bnode/Simple}
   - Where

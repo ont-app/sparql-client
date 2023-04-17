@@ -57,7 +57,8 @@
             ))
 
 ;; standard logging level
-(timbre/set-level! :info) ;;:debug)
+(timbre/set-min-level! :debug) ;;:info) ;;:debug)
+
 
 ;; graph-log
 (defn log-reset!
@@ -138,7 +139,7 @@ WHERE
              #voc/lstr "Barack Obama@en"))
     (is (wd-client :wd/Q76 :rdfs/label #voc/lstr "Barack Obama@en"))
 
-    (is (= (vec (query wd-client (core/prefixed
+    (is (= (vec (query wd-client (rdf/prefixed
                                what-is-spanish-for-human?)))
            [{:esLabel #voc/lstr "ser humano@es"}]))
     ;; testing p-traversal function...
@@ -151,7 +152,7 @@ WHERE
     ;; is Barry a Human?
     (is (= (wd-client :wd/Q76 instance-of :wd/Q5)
            :wd/Q5))
-    (is (= (core/prefixed barry-query)
+    (is (= (rdf/prefixed barry-query)
            "PREFIX wd: <http://www.wikidata.org/entity/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
@@ -162,7 +163,7 @@ WHERE
   Filter (Lang(?label) = \"en\")
   }"
            ))
-    (is (= (query wd-client (core/prefixed barry-query))
+    (is (= (query wd-client (rdf/prefixed barry-query))
            '({:label #voc/lstr "Barack Obama@en"}))
 
     )))
@@ -214,9 +215,11 @@ WHERE
 
 (deftest bnode-annotation-and-round-tripping
   (with-valid-endpoint
-    (let [jack (rdf/load-rdf
+    (let [_ (println "about to load jack.ttl")
+          jack (rdf/load-rdf
                 (test-graph-load-context ::test-jack)
                 (io/resource "jack.ttl"))
+          _ (println "loaded jack.ttl")
           jack' (core/reset-annotation-graph jack)
           ann (:bnodes jack')
           client-model (unique (ann :bnode/AnnotationGraph :bnode/client-model))
@@ -282,16 +285,16 @@ WHERE
   (prof/serve-ui 7777)
   )
 
-;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;
 ;; OTHER TEST DATA
-;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;
 
 (defn load-cedict-schema
   "Loads a graph containing the OWL spec for https://github.com/ont-app/cedict"
   []
   ;; An owl specification with bnodes
   (if @sparql-endpoint
-    (-> 
+    (->
      (rdf/load-rdf
       (test-graph-load-context ::cedict-schema)
       (io/resource "cedict-schema.ttl"))
